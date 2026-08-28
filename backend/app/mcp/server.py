@@ -14,6 +14,7 @@ import uuid
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import func, select
 
+from app.mcp.auth import require_mcp_ability
 from app.mcp.runtime import json_safe, open_session
 
 # ---- models ----
@@ -38,6 +39,7 @@ mcp = FastMCP("GEOrank")
 # 公司目录
 # =============================================================================
 @mcp.tool()
+@require_mcp_ability("georank:companies:read")
 async def georank_list_companies(
     query: str | None = None, category: str | None = None,
     page: int = 1, size: int = 20, sort: str = "newest",
@@ -85,6 +87,7 @@ async def georank_list_companies(
 
 
 @mcp.tool()
+@require_mcp_ability("georank:companies:read")
 async def georank_get_company(identifier: str) -> dict:
     """按 path_key / slug / url 获取单个公司的详细资料。"""
     async with open_session() as db:
@@ -113,6 +116,7 @@ async def georank_get_company(identifier: str) -> dict:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:companies:read")
 async def georank_company_similar(identifier: str, limit: int = 6) -> dict:
     """按同一分类/标签近似推荐同领域的公司。"""
     limit = min(20, max(1, int(limit)))
@@ -140,6 +144,7 @@ async def georank_company_similar(identifier: str, limit: int = 6) -> dict:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:companies:read")
 async def georank_company_pipeline_status(company_id: str) -> dict:
     """查询某公司的采集/入库流水线状态。"""
     async with open_session() as db:
@@ -162,6 +167,7 @@ async def georank_company_pipeline_status(company_id: str) -> dict:
 # GEO 诊断
 # =============================================================================
 @mcp.tool()
+@require_mcp_ability("georank:diagnostics:write")
 async def georank_diagnose_url(url: str, company_id: str | None = None) -> dict:
     """提交一个网站 URL 进行 GEO 诊断，返回 report_id（异步，前端轮询状态）。
 
@@ -203,6 +209,7 @@ async def georank_diagnose_url(url: str, company_id: str | None = None) -> dict:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:diagnostics:read")
 async def georank_get_diagnostic_report(report_id: str) -> dict:
     """根据 report_id 获取诊断报告（含 Schema/内容/Meta/引用分析与建议）。"""
     async with open_session() as db:
@@ -225,6 +232,7 @@ async def georank_get_diagnostic_report(report_id: str) -> dict:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:diagnostics:read")
 async def georank_diagnostic_history(limit: int = 20) -> dict:
     """最近创建的诊断报告列表（系统视图，命中全部历史）。"""
     limit = min(100, max(1, int(limit)))
@@ -242,6 +250,7 @@ async def georank_diagnostic_history(limit: int = 20) -> dict:
 # 关键词拓词
 # =============================================================================
 @mcp.tool()
+@require_mcp_ability("georank:keywords:expand")
 async def georank_expand_keywords(seeds: list[str]) -> dict:
     """从业务词扩展为问题词/场景词/商业意图词/推荐型关键词资产。"""
     if not seeds:
@@ -254,6 +263,7 @@ async def georank_expand_keywords(seeds: list[str]) -> dict:
 # GEO 方案 / 问答
 # =============================================================================
 @mcp.tool()
+@require_mcp_ability("georank:solutions:read")
 async def georank_solution_channels() -> dict:
     """列出可用的 GEO 问答频道及示例问题。"""
     config = await get_solution_channel_config()
@@ -269,6 +279,7 @@ async def georank_solution_channels() -> dict:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:solutions:chat")
 async def georank_solution_chat(question: str, channel: str | None = None) -> dict:
     """就某个 GEO 频道语境回答问题（系统级 AI 调用，无用户上下文）。"""
     if not question.strip():
@@ -290,6 +301,7 @@ async def georank_solution_chat(question: str, channel: str | None = None) -> di
 # 专家
 # =============================================================================
 @mcp.tool()
+@require_mcp_ability("georank:experts:read")
 async def georank_list_experts(category: str | None = None) -> list:
     """列出已发布的 GEO/AI 专家资料。category 可选：strategy/..."""
     stmt = select(ExpertProfile).where(ExpertProfile.is_published.is_(True))
@@ -307,6 +319,7 @@ async def georank_list_experts(category: str | None = None) -> list:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:experts:read")
 async def georank_get_expert(slug: str) -> dict:
     """按 slug 获取专家详情。"""
     async with open_session() as db:
@@ -331,6 +344,7 @@ async def georank_get_expert(slug: str) -> dict:
 # 内容（教程）
 # =============================================================================
 @mcp.tool()
+@require_mcp_ability("georank:content:read")
 async def georank_list_content(content_type: str | None = None, limit: int = 20) -> list:
     """列出已发布的内容/教程。content_type 可选（如 tutorial）。"""
     limit = min(100, max(1, int(limit)))
@@ -354,6 +368,7 @@ async def georank_list_content(content_type: str | None = None, limit: int = 20)
 
 
 @mcp.tool()
+@require_mcp_ability("georank:content:read")
 async def georank_get_content(slug: str) -> dict:
     """按 slug 获取已发布内容/教程正文。"""
     async with open_session() as db:
@@ -377,6 +392,7 @@ async def georank_get_content(slug: str) -> dict:
 # 站点设置 / 用量
 # =============================================================================
 @mcp.tool()
+@require_mcp_ability("georank:settings:read")
 async def georank_get_public_settings() -> dict:
     """读取公开的站点配置（站点名、描述、默认语言等）。"""
     async with open_session() as db:
@@ -411,6 +427,7 @@ def _brief_parts(brief: str) -> dict:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:content:generate")
 async def georank_generate_jsonld(brief: str) -> dict:
     """由一段简短描述生成 Schema.org JSON-LD（Organization + WebSite）。"""
     p = _brief_parts(brief)
@@ -435,6 +452,7 @@ async def georank_generate_jsonld(brief: str) -> dict:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:content:generate")
 async def georank_generate_llms_txt(brief: str) -> str:
     """由一段简短描述生成 llms.txt 草稿（站点摘要 + 重要页面 + AI Reading Notes）。"""
     p = _brief_parts(brief)
@@ -457,6 +475,7 @@ async def georank_generate_llms_txt(brief: str) -> str:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:content:generate")
 async def georank_generate_title(brief: str) -> dict:
     """为品牌/页面生成一个聚焦 AI 搜索可见性的 GEO 标题。"""
     p = _brief_parts(brief)
@@ -470,6 +489,7 @@ async def georank_generate_title(brief: str) -> dict:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:content:generate")
 async def georank_generate_knowledge_base(brief: str) -> dict:
     """生成一份知识库草稿大纲（FAQ / 术语 / 资源 / 工具）。"""
     p = _brief_parts(brief)
@@ -488,6 +508,7 @@ async def georank_generate_knowledge_base(brief: str) -> dict:
 
 
 @mcp.tool()
+@require_mcp_ability("georank:content:generate")
 async def georank_score_ai_friendliness(brief: str) -> dict:
     """对一段品牌/站点描述做 AI 友好度启发式评分（0-100），并给出改进点。"""
     p = _brief_parts(brief)

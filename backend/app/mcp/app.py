@@ -7,18 +7,21 @@
 """
 from __future__ import annotations
 
+from app.mcp.auth import McpAuthConfig, McpAuthMiddleware
 from app.mcp.server import mcp
 
 
-def mcp_asgi_app():
+def mcp_asgi_app(auth_config: McpAuthConfig | None = None):
     """返回可被 uvicorn 直接运行的 ASGI 应用（streamable-http 或 SSE 回退）。"""
     if hasattr(mcp, "streamable_http_app"):
-        return mcp.streamable_http_app()
-    if hasattr(mcp, "sse_app"):
-        return mcp.sse_app()
-    raise RuntimeError(
-        "当前安装的 mcp SDK 不提供 streamable_http_app/sse_app；请升级到 mcp>=1.12"
-    )
+        app = mcp.streamable_http_app()
+    elif hasattr(mcp, "sse_app"):
+        app = mcp.sse_app()
+    else:
+        raise RuntimeError(
+            "当前安装的 mcp SDK 不提供 streamable_http_app/sse_app；请升级到 mcp>=1.12"
+        )
+    return McpAuthMiddleware(app, auth_config)
 
 
 def mount_mcp_app(fastapi_app, path: str = "/mcp"):
