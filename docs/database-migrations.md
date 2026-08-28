@@ -1,15 +1,16 @@
 # 数据库迁移与启动
 
-GEOrank 使用 Alembic 作为数据库结构的唯一所有者。Docker Compose 中的 `migrate` 是唯一迁移服务；它成功退出后，API、Worker、Beat 和 Crawler 才会启动。应用镜像的统一 entrypoint 还会执行只读的 `python -m app.scripts.migrate --check`，因此直接运行 API 或 Celery 镜像时，数据库未迁移或版本落后都会立即退出。
+GEOrank 使用 Alembic 作为数据库结构的唯一所有者。Docker Compose 中的 `migrate` 是唯一迁移服务；它连接由 `docker-helm` 统一维护的 `dofe-postgres`，成功退出后，API、Worker、Beat 和 Crawler 才会启动。应用镜像的统一 entrypoint 还会执行只读的 `python -m app.scripts.migrate --check`，因此直接运行 API 或 Celery 镜像时，数据库未迁移或版本落后都会立即退出。
 
 ## 首次启动
 
 ```bash
 cp .env.example .env
-docker compose up -d
+docker compose -f ../docker-helm.dofe.ai/docker-compose.yml --profile infra up -d qdrant neo4j minio
+docker compose up -d migrate api worker beat crawler
 ```
 
-启动链路会等待 PostgreSQL 健康，获取 PostgreSQL advisory lock，运行 `alembic upgrade head`，再核对数据库中的版本与代码仓库 Alembic head 完全一致。迁移失败会让依赖服务保持停止状态。
+启动前必须确认 `dofe-postgres`、`dofe-redis`、`dofe-qdrant`、`dofe-neo4j`、`dofe-minio` 已由 `docker-helm` 启动并接入 `common_network`。迁移服务获取 PostgreSQL advisory lock，运行 `alembic upgrade head`，再核对数据库中的版本与代码仓库 Alembic head 完全一致。迁移失败会让依赖服务保持停止状态。
 
 `migrate` 只接收数据库连接所需环境变量，不读取应用 `.env` 中的第三方密钥。应用服务仍通过 `GEORANK_ENV_FILE` 加载运行配置，默认值为 `.env`。
 
@@ -18,7 +19,7 @@ docker compose up -d
 ```bash
 docker compose ps
 docker compose logs migrate
-docker compose exec postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "TABLE alembic_version;"'
+docker exec dofe-postgres psql -U dofe -d georank -c 'TABLE alembic_version;'
 ```
 
 `migrate` 正常完成后会显示 `Exited (0)`。API 应显示 `healthy`。
@@ -29,7 +30,7 @@ docker compose exec postgres sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" 
 
 ```bash
 docker compose run --rm migrate
-docker compose up -d
+docker compose up -d api worker beat crawler
 ```
 
 `alembic upgrade head` 可安全重复执行。迁移服务使用 session-level advisory lock；即使维护人员同时发起两次命令，也只会有一个进程修改结构。

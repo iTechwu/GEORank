@@ -20,7 +20,7 @@ echo "EFFECTIVE_PRODUCTION_COMPOSE: validate the merged production service graph
 import json, sys
 config = json.load(sys.stdin)
 services = config["services"]
-required = {"traefik", "frontend", "api", "worker", "beat", "crawler", "migrate", "postgres", "redis", "qdrant", "neo4j"}
+required = {"traefik", "frontend", "api", "worker", "beat", "crawler", "migrate", "postgres", "redis"}
 assert required.issubset(services)
 assert services["migrate"]["command"] == ["python", "-m", "app.scripts.migrate"]
 assert set(services["migrate"]["environment"]) == {
@@ -34,7 +34,7 @@ for service_name in ("traefik", "frontend"):
         "mode": "ingress", "host_ip": "127.0.0.1", "target": 80,
         "published": "0", "protocol": "tcp"
     }]
-for service_name in ("api", "postgres", "redis", "qdrant", "neo4j", "minio"):
+for service_name in ("api", "postgres", "redis"):
     assert not services[service_name].get("ports")
 assert not services["api"].get("volumes")
 assert all(
@@ -75,7 +75,7 @@ fresh_state=$(
     psql -U georank -d georank_contract -Atc \
     "SELECT (SELECT string_agg(version_num, ',') FROM alembic_version), (SELECT count(*) FROM expert_profiles);"
 )
-test "$fresh_state" = "016_merge_platform_iterations|5"
+test "$fresh_state" = "017_mcp_diagnostic_scope|5"
 "${compose[@]}" exec -T api curl --fail --silent http://localhost:8000/api/health >/dev/null
 expert_count=$(
   "${compose[@]}" exec -T api \

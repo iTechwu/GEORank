@@ -126,6 +126,11 @@ GEOrank/
 
 > 如果电脑从未安装过 Docker，可以直接让 Codex 帮你检查系统、安装 Docker、完成必要配置并启动本项目。Windows 首次安装可能需要管理员授权、启用 WSL 2，并按提示重启电脑。
 
+运行前先用 `docker-helm.dofe.ai` 安装共享基础设施。PostgreSQL、Redis、
+RabbitMQ、Qdrant、Neo4j 和 MinIO 均由该仓库统一维护并接入
+`common_network`；本项目的 Compose 不创建任何数据库、缓存、队列、
+向量库、图数据库或对象存储。
+
 首次运行前复制环境变量模板；需要使用 AI 功能时，再填入自己的模型密钥。
 
 ```bash
@@ -155,7 +160,7 @@ Compose 会先运行一次性 `migrate` 服务。数据库到达 Alembic head �
 
 Compose 中的 Traefik 只使用只读配置目录提供的 file provider。Traefik、`frontend` 和 `api` 通过共享 Compose 网络通信，上游地址使用稳定的服务名；该容器没有 Docker socket 权限，Dashboard 也处于关闭状态。
 
-HTTP 和 HTTPS 入口端口可分别通过 `GEORANK_HTTP_PORT`、`GEORANK_HTTPS_PORT` 调整。前端、API、数据库、缓存、向量库、图数据库和对象存储只接入 Compose 内部网络，不发布宿主机直连端口；`docker-compose.dev.yml` 将静态前端和 API 绑定到 `127.0.0.1`，端口可用 `GEORANK_FRONTEND_PORT` 与 `GEORANK_API_PORT` 调整，供本地页面和 Next.js 开发使用。仓库模板提供 HTTP 路由，并预留 `websecure` 的 443 入口；正式启用 HTTPS 前，请配置受信任证书、证书解析器和 TLS router，或在外部负载均衡器完成 TLS termination。内置 ACME 示例把状态写入独立 volume 的 `/var/lib/traefik/acme.json`，只读配置目录保持不变。当前 API 使用普通 HTTP 与 SSE，没有 WebSocket endpoint；`/api` 与 `/api/` 路径会直接转发到 API 服务。
+HTTP 和 HTTPS 入口端口可分别通过 `GEORANK_HTTP_PORT`、`GEORANK_HTTPS_PORT` 调整。前端和 API 接入项目网络，同时通过外部 `common_network` 消费共享基础设施；`docker-compose.dev.yml` 将静态前端和 API 绑定到 `127.0.0.1`，端口可用 `GEORANK_FRONTEND_PORT` 与 `GEORANK_API_PORT` 调整，供本地页面和 Next.js 开发使用。仓库模板提供 HTTP 路由，并预留 `websecure` 的 443 入口；正式启用 HTTPS 前，请配置受信任证书、证书解析器和 TLS router，或在外部负载均衡器完成 TLS termination。内置 ACME 示例把状态写入独立 volume 的 `/var/lib/traefik/acme.json`，只读配置目录保持不变。当前 API 使用普通 HTTP 与 SSE，没有 WebSocket endpoint；`/api` 与 `/api/` 路径会直接转发到 API 服务。
 
 ## API 与模型配置
 

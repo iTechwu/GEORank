@@ -30,10 +30,10 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:8899", "http://localhost:80", "http://localhost", "http://127.0.0.1"]
 
     # ----- PostgreSQL -----
-    POSTGRES_HOST: str = "postgres"
+    POSTGRES_HOST: str = "dofe-postgres"
     POSTGRES_PORT: int = 5432
     POSTGRES_DB: str = "georank"
-    POSTGRES_USER: str = "georank"
+    POSTGRES_USER: str = "dofe"
     POSTGRES_PASSWORD: str = "change-me-postgres-password"
     TEST_DATABASE_URL: str = ""
 
@@ -49,7 +49,7 @@ class Settings(BaseSettings):
         ).render_as_string(hide_password=False)
 
     # ----- Redis -----
-    REDIS_HOST: str = "redis"
+    REDIS_HOST: str = "dofe-redis"
     REDIS_PORT: int = 6379
     # 连接集中式/远程 Redis 时可用完整 URL 覆盖（含密码、独立 DB 索引）。
     # 留空则回退到由 REDIS_HOST/PORT 拼出的默认 URL。
@@ -69,17 +69,17 @@ class Settings(BaseSettings):
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"
 
     # ----- Qdrant 向量数据库 -----
-    QDRANT_HOST: str = "qdrant"
+    QDRANT_HOST: str = "dofe-qdrant"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "companies"
 
     # ----- Neo4j 知识图谱 -----
-    NEO4J_URI: str = "bolt://neo4j:7687"
+    NEO4J_URI: str = "bolt://dofe-neo4j:7687"
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str = "change-me-neo4j-password"
 
     # ----- MinIO 对象存储 -----
-    MINIO_ENDPOINT: str = "minio:9000"
+    MINIO_ENDPOINT: str = "dofe-minio:9000"
     MINIO_ACCESS_KEY: str = Field(
         default="change-me-minio-access-key",
         validation_alias=AliasChoices("MINIO_ACCESS_KEY", "MINIO_USER"),
@@ -88,7 +88,7 @@ class Settings(BaseSettings):
         default="change-me-minio-secret-key",
         validation_alias=AliasChoices("MINIO_SECRET_KEY", "MINIO_PASSWORD"),
     )
-    MINIO_BUCKET: str = "georank-assets"
+    MINIO_BUCKET: str = "xica-ai-system"
 
     # ----- AI / LLM -----
     # 主 LLM 服务（兼容 OpenAI API 格式的服务均可）
