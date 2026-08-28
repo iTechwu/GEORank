@@ -21,7 +21,8 @@ langchain-community==0.3.14
 
 # ===== Vector Database =====
 qdrant-client==1.12.1
-numpy>=1.26.4,<2
+# numpy 无需限定 <2：python3.14(uhub) 下 1.x 无 wheel，放宽以安装 numpy 2.x。
+numpy>=1.26.4
 
 # ===== Knowledge Graph =====
 neo4j==5.27.0
