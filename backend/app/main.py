@@ -283,6 +283,12 @@ app.include_router(api_router, prefix="/api")
 app.include_router(company_pages_router)
 app.include_router(tutorial_pages_router)
 
+# MCP（Model Context Protocol）端点 — 供 AI Agent 诊断/问答/拓词/方案/工具。
+# 路径可通过 GEORANK_MCP_PATH 调整，默认为 /mcp（streamable-http）。
+if settings.MCP_ENABLED:
+    from app.mcp.app import mount_mcp_app
+    mount_mcp_app(app, path=getattr(settings, "MCP_PATH", "/mcp"))
+
 
 @app.get("/api/health")
 async def health_check():

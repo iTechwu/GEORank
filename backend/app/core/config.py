@@ -51,13 +51,21 @@ class Settings(BaseSettings):
     # ----- Redis -----
     REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
+    # 连接集中式/远程 Redis 时可用完整 URL 覆盖（含密码、独立 DB 索引）。
+    # 留空则回退到由 REDIS_HOST/PORT 拼出的默认 URL。
+    REDIS_URL_EXTERNAL: str = ""
+    CELERY_BROKER_URL_EXTERNAL: str = ""
 
     @property
     def REDIS_URL(self) -> str:
+        if self.REDIS_URL_EXTERNAL:
+            return self.REDIS_URL_EXTERNAL
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
 
     @property
     def CELERY_BROKER_URL(self) -> str:
+        if self.CELERY_BROKER_URL_EXTERNAL:
+            return self.CELERY_BROKER_URL_EXTERNAL
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"
 
     # ----- Qdrant 向量数据库 -----
@@ -113,6 +121,11 @@ class Settings(BaseSettings):
     def effective_embedding_key(self) -> str:
         """Embedding 仅使用专用 Key，避免误用不支持向量的 LLM 网关。"""
         return self.EMBEDDING_API_KEY or self.OPENAI_API_KEY
+
+    # ----- MCP (Model Context Protocol) -----
+    # 是否在 /mcp 暴露 MCP 端点（供 AI Agent 调用）。独立 MCP 进程不受此开关影响。
+    MCP_ENABLED: bool = True
+    MCP_PATH: str = "/mcp"
 
     # ----- JWT -----
     JWT_SECRET: str = "change-me-jwt-secret"
