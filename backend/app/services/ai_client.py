@@ -788,11 +788,14 @@ ai_client = AIClient()
 # ---- 向后兼容的函数式接口 ----
 
 async def chat_completion(messages: list[dict], model: str | None = None, temperature: float = 0.3, max_tokens: int = 4096) -> str:
+    from app.mcp.auth import current_models_provider_override
+
     return await ai_client._complete_with_fallback(
         messages,
         temperature=temperature,
         model=model,
         max_tokens=max_tokens,
+        provider_override=current_models_provider_override(model=model),
     )
 
 

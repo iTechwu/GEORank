@@ -14,7 +14,11 @@ import uuid
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import func, select
 
-from app.mcp.auth import require_mcp_ability
+from app.mcp.auth import (
+    current_mcp_auth,
+    current_models_provider_override,
+    require_mcp_ability,
+)
 from app.mcp.runtime import json_safe, open_session
 
 # ---- models ----
@@ -173,6 +177,10 @@ async def georank_diagnose_url(url: str, company_id: str | None = None) -> dict:
 
     仅 URL 必须合法；诊断结果通过 georank_get_diagnostic_report 获取。
     """
+    if current_mcp_auth().credential_type == "models_api_key":
+        raise RuntimeError(
+            "公网 MCP 暂不支持需要异步模型任务的诊断；短期运行凭据接入后开放"
+        )
     try:
         normalized = normalize_company_url(url)
     except ValueError as exc:
@@ -255,7 +263,10 @@ async def georank_expand_keywords(seeds: list[str]) -> dict:
     """从业务词扩展为问题词/场景词/商业意图词/推荐型关键词资产。"""
     if not seeds:
         raise ValueError("请至少提供一个业务词种子")
-    result = await expand_keywords(seeds)
+    result = await expand_keywords(
+        seeds,
+        provider_override=current_models_provider_override(),
+    )
     return json_safe(result)
 
 

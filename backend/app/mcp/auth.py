@@ -8,7 +8,7 @@ import json
 import os
 import secrets
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import wraps
 from typing import Awaitable, Callable
 from urllib import error as urllib_error
@@ -37,6 +37,11 @@ class McpAuthContext:
     tenant_id: str | None
     subject: str | None
     abilities: tuple[str, ...]
+    api_key_id: str | None = None
+    models_api_key: str | None = field(default=None, repr=False, compare=False)
+    models_base_url: str | None = None
+    models_chat_model: str | None = None
+    models_embedding_model: str | None = None
 
     def allows(self, required: str) -> bool:
         return "*" in self.abilities or required in self.abilities
@@ -54,6 +59,11 @@ class McpAuthConfig:
     sso_client_id: str
     sso_userinfo_url: str
     sso_timeout_seconds: float
+    gateway_secret: str = ""
+    gateway_only: bool = False
+    models_base_url: str = "https://models.test.dofe.ai/api/v1"
+    models_chat_model: str = ""
+    models_embedding_model: str = ""
 
     @classmethod
     def from_env(cls) -> "McpAuthConfig":
@@ -70,6 +80,19 @@ class McpAuthConfig:
             sso_timeout_seconds=max(
                 1.0, float(os.environ.get("SSO_MCP_USERINFO_TIMEOUT_SECONDS", "3"))
             ),
+            gateway_secret=os.environ.get("GEORANK_MCP_GATEWAY_SECRET", "").strip(),
+            gateway_only=_env_bool("GEORANK_MCP_GATEWAY_ONLY", False),
+            models_base_url=os.environ.get(
+                "GEORANK_MCP_MODELS_BASE_URL",
+                "https://models.test.dofe.ai/api/v1",
+            ).strip().rstrip("/"),
+            models_chat_model=os.environ.get(
+                "GEORANK_MCP_LLM_MODEL", os.environ.get("LLM_MODEL", "")
+            ).strip(),
+            models_embedding_model=os.environ.get(
+                "GEORANK_MCP_EMBEDDING_MODEL",
+                os.environ.get("EMBEDDING_MODEL", ""),
+            ).strip(),
         )
 
 
@@ -84,6 +107,34 @@ def current_mcp_auth() -> McpAuthContext:
     if context is None:
         raise McpUnauthorized()
     return context
+
+
+@dataclass(frozen=True)
+class McpModelsProviderOverride:
+    api_key: str = field(repr=False)
+    base_url: str
+    model: str
+    provider: str = "models"
+    source: str = "mcp_models_api_key"
+
+
+def current_models_provider_override(
+    *, model: str | None = None, embedding: bool = False
+) -> McpModelsProviderOverride | None:
+    """Return the request-scoped Models credential without persisting it."""
+    context = _AUTH_CONTEXT.get()
+    if context is None or context.credential_type != "models_api_key":
+        return None
+    selected_model = model or (
+        context.models_embedding_model if embedding else context.models_chat_model
+    )
+    if not context.models_api_key or not context.models_base_url or not selected_model:
+        raise McpUnauthorized()
+    return McpModelsProviderOverride(
+        api_key=context.models_api_key,
+        base_url=context.models_base_url,
+        model=selected_model,
+    )
 
 
 def require_mcp_ability(required: str):
@@ -166,11 +217,15 @@ class McpAuthMiddleware:
             for key, value in scope.get("headers", [])
         }
         try:
-            context = await authenticate_bearer(
-                headers.get("authorization", ""),
-                self.config,
-                fetch_userinfo=self.fetch_userinfo,
-            )
+            context = _gateway_context(headers, self.config)
+            if context is None:
+                if self.config.gateway_only:
+                    raise McpUnauthorized()
+                context = await authenticate_bearer(
+                    headers.get("authorization", ""),
+                    self.config,
+                    fetch_userinfo=self.fetch_userinfo,
+                )
         except McpUnauthorized:
             await _send_json(
                 send,
@@ -189,6 +244,51 @@ class McpAuthMiddleware:
             await self.app(scope, receive, send)
         finally:
             _AUTH_CONTEXT.reset(reset_token)
+
+
+def _gateway_context(headers: dict[str, str], config: McpAuthConfig) -> McpAuthContext | None:
+    gateway_headers = {
+        "x-dofe-mcp-gateway-secret",
+        "x-dofe-auth-verified",
+        "x-dofe-api-key-id",
+        "x-dofe-tenant-id",
+        "x-dofe-sso-team-id",
+    }
+    attempted = any(headers.get(name, "").strip() for name in gateway_headers)
+    if not attempted:
+        return None
+
+    provided_secret = headers.get("x-dofe-mcp-gateway-secret", "").strip()
+    if (
+        not config.gateway_secret
+        or not provided_secret
+        or not secrets.compare_digest(config.gateway_secret, provided_secret)
+        or headers.get("x-dofe-auth-verified", "").strip() != "models-api-key-v1"
+    ):
+        raise McpUnauthorized()
+
+    api_key_id = headers.get("x-dofe-api-key-id", "").strip()
+    tenant_id = headers.get("x-dofe-tenant-id", "").strip()
+    sso_team_id = headers.get("x-dofe-sso-team-id", "").strip()
+    models_api_key = _bearer_token(headers.get("authorization", ""))
+    if not api_key_id or not tenant_id or not sso_team_id or not models_api_key:
+        raise McpUnauthorized()
+    if not config.models_base_url or not config.models_chat_model:
+        raise McpUnauthorized()
+
+    return McpAuthContext(
+        credential_type="models_api_key",
+        scope="write",
+        token_hash=hashlib.sha256(models_api_key.encode("utf-8")).hexdigest(),
+        tenant_id=tenant_id,
+        subject=api_key_id,
+        abilities=("*",),
+        api_key_id=api_key_id,
+        models_api_key=models_api_key,
+        models_base_url=config.models_base_url,
+        models_chat_model=config.models_chat_model,
+        models_embedding_model=config.models_embedding_model,
+    )
 
 
 def _static_context(token: str, config: McpAuthConfig) -> McpAuthContext | None:

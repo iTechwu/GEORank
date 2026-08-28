@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import base64
 import json
 import unittest
@@ -8,6 +10,7 @@ from app.mcp.auth import (
     McpUnauthorized,
     authenticate_bearer,
     current_mcp_auth,
+    current_models_provider_override,
     require_mcp_ability,
 )
 
@@ -150,10 +153,12 @@ class McpAuthenticationTests(unittest.IsolatedAsyncioTestCase):
 
 
 class McpAuthMiddlewareTests(unittest.IsolatedAsyncioTestCase):
-    async def request(self, app, authorization: str | None = None):
+    async def request(self, app, authorization: str | None = None, extra_headers=None):
         headers = []
         if authorization is not None:
             headers.append((b"authorization", authorization.encode("utf-8")))
+        for key, value in (extra_headers or {}).items():
+            headers.append((key.lower().encode("ascii"), value.encode("utf-8")))
         messages = []
         received = False
 
@@ -206,6 +211,85 @@ class McpAuthMiddlewareTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(observed, ["team-youhuitun"])
         with self.assertRaises(McpUnauthorized):
             current_mcp_auth()
+
+    async def test_models_gateway_context_and_key_are_request_scoped(self) -> None:
+        observed = []
+
+        async def inner(_scope, _receive, send):
+            context = current_mcp_auth()
+            provider = current_models_provider_override()
+            observed.append(
+                (
+                    context.credential_type,
+                    context.tenant_id,
+                    context.api_key_id,
+                    provider.api_key,
+                    provider.base_url,
+                    provider.model,
+                )
+            )
+            await send({"type": "http.response.start", "status": 204, "headers": []})
+            await send({"type": "http.response.body", "body": b""})
+
+        gateway_config = config(
+            gateway_secret="gateway-secret",
+            models_base_url="https://models.test.dofe.ai/api/v1",
+            models_chat_model="kimi-k3",
+        )
+        messages = await self.request(
+            McpAuthMiddleware(inner, gateway_config),
+            "Bearer sk-models-user",
+            {
+                "X-Dofe-Mcp-Gateway-Secret": "gateway-secret",
+                "X-Dofe-Auth-Verified": "models-api-key-v1",
+                "X-Dofe-Api-Key-Id": "key-42",
+                "X-Dofe-Tenant-Id": "tenant-42",
+                "X-Dofe-Sso-Team-Id": "team-42",
+            },
+        )
+
+        self.assertEqual(messages[0]["status"], 204)
+        self.assertEqual(
+            observed,
+            [(
+                "models_api_key",
+                "tenant-42",
+                "key-42",
+                "sk-models-user",
+                "https://models.test.dofe.ai/api/v1",
+                "kimi-k3",
+            )],
+        )
+        self.assertIsNone(current_models_provider_override())
+
+    async def test_invalid_gateway_secret_cannot_fall_back_to_legacy_token(self) -> None:
+        async def inner(_scope, _receive, send):
+            await send({"type": "http.response.start", "status": 204, "headers": []})
+
+        messages = await self.request(
+            McpAuthMiddleware(inner, config(gateway_secret="correct")),
+            "Bearer write-secret",
+            {
+                "X-Dofe-Mcp-Gateway-Secret": "wrong",
+                "X-Dofe-Auth-Verified": "models-api-key-v1",
+                "X-Dofe-Api-Key-Id": "key-1",
+                "X-Dofe-Tenant-Id": "tenant-1",
+                "X-Dofe-Sso-Team-Id": "team-1",
+            },
+        )
+
+        self.assertEqual(messages[0]["status"], 401)
+
+    async def test_gateway_only_rejects_legacy_token(self) -> None:
+        async def inner(_scope, _receive, send):
+            await send({"type": "http.response.start", "status": 204, "headers": []})
+
+        messages = await self.request(
+            McpAuthMiddleware(inner, config(gateway_only=True)),
+            "Bearer write-secret",
+        )
+
+        self.assertEqual(messages[0]["status"], 401)
 
     async def test_tool_ability_is_enforced_inside_authenticated_request(self) -> None:
         called = False
