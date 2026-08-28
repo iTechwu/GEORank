@@ -29,6 +29,7 @@ AUTH_CONFIG = McpAuthConfig(
 
 
 TOOL_CALLS = [
+    (server.georank_system_status, ()),
     (server.georank_score_ai_friendliness, ("优惠豚：一个优惠信息平台",)),
     (server.georank_generate_jsonld, ("优惠豚：一个优惠信息平台",)),
     (server.georank_generate_llms_txt, ("优惠豚：一个优惠信息平台",)),
@@ -114,6 +115,23 @@ class McpToolAuthorizationTests(unittest.IsolatedAsyncioTestCase):
 
         await self.call_as_sso(["georank:content:generate"], operation)
         self.assertIsInstance(result["score"], int)
+
+    async def test_system_status_exposes_tenant_scope_without_credential_material(self) -> None:
+        result = None
+
+        async def operation():
+            nonlocal result
+            result = await server.georank_system_status()
+
+        await self.call_as_sso(["georank:system:read"], operation)
+        self.assertEqual(result["service"], "georank")
+        self.assertEqual(result["tenant_id"], "team-youhuitun")
+        self.assertEqual(result["mcp"]["credential_type"], "sso")
+        self.assertEqual(result["mcp"]["scope"], "write")
+        self.assertEqual(result["mcp"]["tenant_mode"], "tenant_scoped")
+        self.assertEqual(result["mcp"]["abilities"], ["georank:system:read"])
+        self.assertNotIn("token", json.dumps(result))
+        self.assertNotIn("hash", json.dumps(result))
 
 
 if __name__ == "__main__":

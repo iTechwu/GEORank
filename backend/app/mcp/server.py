@@ -40,6 +40,28 @@ _IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$")
 
 
 # =============================================================================
+# 系统能力
+# =============================================================================
+@mcp.tool()
+@require_mcp_ability("georank:system:read")
+async def georank_system_status() -> dict:
+    """返回当前 MCP 调用者的租户和权限范围，用于自动化执行前置检查。"""
+    auth = current_mcp_auth()
+    return {
+        "service": "georank",
+        "status": "ok",
+        "tenant_id": auth.tenant_id,
+        "mcp": {
+            "credential_type": auth.credential_type,
+            "scope": auth.scope,
+            "tenant_mode": "tenant_scoped" if auth.tenant_id else "cross_tenant",
+            "cross_tenant": auth.tenant_id is None,
+            "abilities": sorted(auth.abilities),
+        },
+    }
+
+
+# =============================================================================
 # 公司目录
 # =============================================================================
 @mcp.tool()

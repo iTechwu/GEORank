@@ -16,6 +16,7 @@ from urllib import request as urllib_request
 
 
 READ_ABILITIES = (
+    "georank:system:read",
     "georank:companies:read",
     "georank:diagnostics:read",
     "georank:solutions:read",
