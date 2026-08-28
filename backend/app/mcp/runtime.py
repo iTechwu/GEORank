@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import async_session
 
 
-async def open_session() -> AsyncSession:
+def open_session() -> AsyncSession:
     """创建一个后端使用的异步会话（由调用方负责关闭）。"""
     return async_session()
 
