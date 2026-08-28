@@ -1,4 +1,4 @@
-FROM python:3.12.13-slim-bookworm@sha256:d50fb7611f86d04a3b0471b46d7557818d88983fc3136726336b2a4c657aa30b
+FROM uhub.service.ucloud.cn/techwu/python:3.12.13-slim-bookworm
 
 WORKDIR /app
 
