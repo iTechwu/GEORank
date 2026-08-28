@@ -3,7 +3,7 @@ GEO 诊断报告数据模型
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Text, Float, DateTime
+from sqlalchemy import String, Text, Float, DateTime, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 import enum
@@ -22,8 +22,18 @@ class DiagnosticStatus(str, enum.Enum):
 
 class DiagnosticReport(Base):
     __tablename__ = "diagnostic_reports"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "idempotency_key",
+            name="uq_diagnostic_reports_tenant_idempotency",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[str | None] = mapped_column(String(128), index=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(120))
+    request_fingerprint: Mapped[str | None] = mapped_column(String(64))
     url: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
     company_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)  # 从公司页发起时写入
     status: Mapped[DiagnosticStatus] = mapped_column(

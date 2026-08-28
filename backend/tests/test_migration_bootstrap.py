@@ -23,8 +23,8 @@ class FakeMigrationRuntime:
         self,
         *,
         state: SchemaState,
-        expected_heads=("016_merge_platform_iterations",),
-        current_versions=("016_merge_platform_iterations",),
+        expected_heads=("017_mcp_diagnostic_scope",),
+        current_versions=("017_mcp_diagnostic_scope",),
         upgrade_error: Exception | None = None,
     ):
         self.state = state
@@ -129,7 +129,7 @@ class MigrationBootstrapTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaisesRegex(
             MigrationBootstrapError,
-            r"expected.*016_merge_platform_iterations.*found.*013_security_invariants",
+            r"expected.*017_mcp_diagnostic_scope.*found.*013_security_invariants",
         ):
             await run_migration_bootstrap(runtime)
 
