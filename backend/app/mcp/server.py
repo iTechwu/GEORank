@@ -9,12 +9,15 @@
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 import uuid
 
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import func, select
 
-from app.mcp.auth import require_mcp_ability
+from app.mcp.auth import current_mcp_auth, require_mcp_ability
 from app.mcp.runtime import json_safe, open_session
 
 # ---- models ----
@@ -33,6 +36,7 @@ from app.services.keyword_expansion import expand_keywords
 from app.services.runtime_settings import get_solution_channel_config
 
 mcp = FastMCP("GEOrank")
+_IDEMPOTENCY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$")
 
 
 # =============================================================================
@@ -168,7 +172,11 @@ async def georank_company_pipeline_status(company_id: str) -> dict:
 # =============================================================================
 @mcp.tool()
 @require_mcp_ability("georank:diagnostics:write")
-async def georank_diagnose_url(url: str, company_id: str | None = None) -> dict:
+async def georank_diagnose_url(
+    url: str,
+    company_id: str | None = None,
+    idempotency_key: str | None = None,
+) -> dict:
     """提交一个网站 URL 进行 GEO 诊断，返回 report_id（异步，前端轮询状态）。
 
     仅 URL 必须合法；诊断结果通过 georank_get_diagnostic_report 获取。
@@ -178,13 +186,37 @@ async def georank_diagnose_url(url: str, company_id: str | None = None) -> dict:
     except ValueError as exc:
         raise ValueError(f"无效 URL: {exc}") from exc
 
+    tenant_id = _required_tenant_id()
+    key = (idempotency_key or "").strip() or None
+    if key is not None and _IDEMPOTENCY_KEY.fullmatch(key) is None:
+        raise ValueError("idempotency_key format is invalid")
+    company_uuid = uuid.UUID(company_id) if company_id else None
+    fingerprint = _diagnostic_fingerprint(normalized, company_id)
+
     async with open_session() as db:
+        if key is not None:
+            existing = (
+                await db.execute(
+                    select(DiagnosticReport).where(
+                        DiagnosticReport.tenant_id == tenant_id,
+                        DiagnosticReport.idempotency_key == key,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                if existing.request_fingerprint != fingerprint:
+                    raise ValueError("idempotency_key conflict")
+                return _diagnostic_submission(existing, reused=True)
+
         access = await resolve_system_async_ai_access(
             db=db, module="diagnostics", prompt_text=f"{normalized}\n{company_id or ''}"
         )
         report = DiagnosticReport(
+            tenant_id=tenant_id,
+            idempotency_key=key,
+            request_fingerprint=fingerprint,
             url=normalized,
-            company_id=uuid.UUID(company_id) if company_id else None,
+            company_id=company_uuid,
             status=DiagnosticStatus.PENDING,
             ai_reservation_id=access.reservation_id,
         )
@@ -204,18 +236,21 @@ async def georank_diagnose_url(url: str, company_id: str | None = None) -> dict:
             report.status = DiagnosticStatus.FAILED
             report.error_message = "queue_dispatch_failed"
             await db.commit()
-        return {"report_id": str(report.id), "status": "failed" if queue_failed else "pending",
-                "url": normalized}
+        return _diagnostic_submission(report, reused=False)
 
 
 @mcp.tool()
 @require_mcp_ability("georank:diagnostics:read")
 async def georank_get_diagnostic_report(report_id: str) -> dict:
     """根据 report_id 获取诊断报告（含 Schema/内容/Meta/引用分析与建议）。"""
+    tenant_id = _required_tenant_id()
     async with open_session() as db:
         report = (
             await db.execute(
-                select(DiagnosticReport).where(DiagnosticReport.id == uuid.UUID(report_id))
+                select(DiagnosticReport).where(
+                    DiagnosticReport.id == uuid.UUID(report_id),
+                    DiagnosticReport.tenant_id == tenant_id,
+                )
             )
         ).scalar_one_or_none()
     if not report:
@@ -234,11 +269,15 @@ async def georank_get_diagnostic_report(report_id: str) -> dict:
 @mcp.tool()
 @require_mcp_ability("georank:diagnostics:read")
 async def georank_diagnostic_history(limit: int = 20) -> dict:
-    """最近创建的诊断报告列表（系统视图，命中全部历史）。"""
+    """列出当前租户最近创建的诊断报告。"""
     limit = min(100, max(1, int(limit)))
+    tenant_id = _required_tenant_id()
     async with open_session() as db:
         rows = (await db.execute(
-            select(DiagnosticReport).order_by(DiagnosticReport.created_at.desc()).limit(limit)
+            select(DiagnosticReport)
+            .where(DiagnosticReport.tenant_id == tenant_id)
+            .order_by(DiagnosticReport.created_at.desc())
+            .limit(limit)
         )).scalars().all()
     return json_safe([{
         "report_id": str(r.id), "url": r.url, "status": _enum(r.status),
@@ -547,3 +586,29 @@ def _date(value):
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return value
+
+
+def _required_tenant_id() -> str:
+    tenant_id = current_mcp_auth().tenant_id
+    if not tenant_id:
+        raise PermissionError("tenant-scoped MCP credential required")
+    return tenant_id
+
+
+def _diagnostic_fingerprint(url: str, company_id: str | None) -> str:
+    payload = json.dumps(
+        {"company_id": company_id, "url": url},
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _diagnostic_submission(report: DiagnosticReport, *, reused: bool) -> dict:
+    return {
+        "report_id": str(report.id),
+        "status": _enum(report.status),
+        "url": report.url,
+        "reused": reused,
+    }
