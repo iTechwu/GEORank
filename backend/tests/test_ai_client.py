@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from app.core.config import settings
 from app.services.ai_client import AIClient
 
 
@@ -91,7 +92,11 @@ class AIClientFallbackTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_runtime_client_rejects_private_provider_before_client_creation(self):
         client = AIClient()
-        with self.assertRaises(ValueError), patch("openai.AsyncOpenAI") as openai_client:
+        with (
+            patch.object(settings, "ALLOW_PRIVATE_LLM_PROVIDER_URLS", False),
+            self.assertRaises(ValueError),
+            patch("openai.AsyncOpenAI") as openai_client,
+        ):
             await client._create_openai_client(
                 api_key="test-key",
                 base_url="https://127.0.0.1/v1",
