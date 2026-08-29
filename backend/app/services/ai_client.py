@@ -4,6 +4,8 @@ AI 客户端服务 — OpenAI API 调用封装
 懒初始化 — 未配置 API Key 时不影响其他服务启动
 """
 import json
+import logging
+import httpx
 from typing import Optional, AsyncGenerator, Any
 from app.core.config import settings
 from app.services.provider_url_security import (
@@ -15,6 +17,7 @@ from app.services.runtime_settings import get_ai_runtime_config
 
 DEFAULT_CHAT_MAX_TOKENS = 4096
 ACTION_PLAN_MAX_TOKENS = 6000
+logger = logging.getLogger("georank.knowledge")
 
 
 class EmbeddingNotConfiguredError(ValueError):
@@ -533,6 +536,10 @@ class AIClient:
         recommended_companies = []
         context_text = ""
 
+        remote_context = await self._remote_knowledge_context(message)
+        if remote_context:
+            context_text += remote_context
+
         if company_ids:
             import uuid
             result = await db.execute(
@@ -610,6 +617,33 @@ class AIClient:
         )
         return reply, recommended_companies
 
+    async def _remote_knowledge_context(self, query: str) -> str:
+        """Read canonical knowledge only when the deployment explicitly enables it."""
+        mode = settings.KNOWLEDGE_READ_MODE.strip().lower()
+        from app.services.knowledge_client import knowledge_client, KnowledgeClientError
+
+        if mode == "local" or not knowledge_client.configured:
+            return ""
+        try:
+            result = await knowledge_client.search(query, top_k=5, include_memories=True)
+            parts = []
+            for hit in result.get("list", []):
+                if not isinstance(hit, dict):
+                    continue
+                content = str(hit.get("content", "")).strip()
+                if content:
+                    parts.append(f"\n### knowledge: {str(hit.get('title', 'evidence')).strip()}\n{content}")
+            remote = "".join(parts)
+            if mode == "shadow":
+                logger.info("knowledge shadow search completed", extra={"hit_count": len(parts)})
+                return ""
+            return remote
+        except (KnowledgeClientError, httpx.HTTPError) as error:
+            logger.warning("knowledge remote search failed: %s", error)
+            if mode == "primary":
+                raise
+            return ""
+
     async def rag_recommend_stream(
         self,
         message: str,
@@ -641,6 +675,8 @@ class AIClient:
             )
             company_ids = [str(company.id) for company in fallback_companies]
 
+        remote_context = await self._remote_knowledge_context(message)
+
         if company_ids:
             yield {"type": "companies", "content": [{"company_id": cid} for cid in company_ids]}
 
@@ -651,6 +687,7 @@ class AIClient:
         user_prompt = (
             f"用户问题：{message}\n"
             f"问答频道：{channel.get('name', '通用问答') if channel else '通用问答'}\n\n"
+            f"统一知识库上下文：{remote_context or '（暂无匹配数据）'}\n\n"
             f"{templates['response_instruction']}"
         )
 

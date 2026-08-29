@@ -90,6 +90,21 @@ class Settings(BaseSettings):
     )
     MINIO_BUCKET: str = "georank-assets"
 
+    # knowledge.dofe.ai is the canonical enterprise knowledge/memory/graph API.
+    KNOWLEDGE_API_URL: str = ""
+    KNOWLEDGE_SSO_ISSUER: str = "https://sso.ixicai.cn/api"
+    KNOWLEDGE_SSO_CLIENT_ID: str = "georank-dofe-ai"
+    KNOWLEDGE_SSO_CLIENT_SECRET: str = ""
+    KNOWLEDGE_TENANT_SLUG: str = "yootun"
+    KNOWLEDGE_SPACE_IDS: str = ""
+    KNOWLEDGE_READ_MODE: str = "local"
+    KNOWLEDGE_TIMEOUT_SECONDS: float = 15.0
+    KNOWLEDGE_VERIFY_TLS: bool = True
+
+    @property
+    def knowledge_space_ids(self) -> list[str]:
+        return [item.strip() for item in self.KNOWLEDGE_SPACE_IDS.split(",") if item.strip()]
+
     # ----- AI / LLM -----
     # 主 LLM 服务（兼容 OpenAI API 格式的服务均可）
     LLM_API_KEY: str = ""
