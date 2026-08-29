@@ -123,6 +123,29 @@ class KnowledgeClientTest(unittest.TestCase):
 
         self.assertEqual(http.post.await_count, 2)
 
+    def test_token_failure_reports_only_the_oauth_error_code(self) -> None:
+        http = _AsyncClient([
+            self._response(
+                {
+                    "error": "unauthorized_client",
+                    "error_description": "upstream-sensitive-detail",
+                },
+                400,
+            )
+        ])
+        client = KnowledgeClient()
+
+        with patch("app.services.knowledge_client.httpx.AsyncClient", return_value=http), patch(
+            "app.services.knowledge_client.settings", self._settings()
+        ):
+            with self.assertRaisesRegex(
+                KnowledgeClientError,
+                r"HTTP 400 \(unauthorized_client\)$",
+            ) as error:
+                asyncio.run(client.search("query"))
+
+        self.assertNotIn("upstream-sensitive-detail", str(error.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from urllib.parse import urlparse
 
@@ -55,7 +56,17 @@ class KnowledgeClient:
                     auth=(settings.KNOWLEDGE_SSO_CLIENT_ID, settings.KNOWLEDGE_SSO_CLIENT_SECRET),
                 )
             if response.status_code >= 400:
-                raise KnowledgeClientError(f"knowledge SSO token request returned HTTP {response.status_code}")
+                oauth_error = ""
+                try:
+                    candidate = response.json().get("error", "")
+                    if isinstance(candidate, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", candidate):
+                        oauth_error = candidate
+                except (AttributeError, TypeError, ValueError):
+                    pass
+                suffix = f" ({oauth_error})" if oauth_error else ""
+                raise KnowledgeClientError(
+                    f"knowledge SSO token request returned HTTP {response.status_code}{suffix}"
+                )
             payload = response.json()
             token = str(payload.get("access_token", "")).strip()
             if not token:
