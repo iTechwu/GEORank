@@ -51,7 +51,7 @@ class KnowledgeClient:
             async with httpx.AsyncClient(timeout=settings.KNOWLEDGE_TIMEOUT_SECONDS, verify=settings.KNOWLEDGE_VERIFY_TLS) as client:
                 response = await client.post(
                     f"{issuer}/oauth/token",
-                    data={"grant_type": "client_credentials"},
+                    data={"grant_type": "client_credentials", "scope": settings.KNOWLEDGE_SSO_SCOPE},
                     auth=(settings.KNOWLEDGE_SSO_CLIENT_ID, settings.KNOWLEDGE_SSO_CLIENT_SECRET),
                 )
             if response.status_code >= 400:

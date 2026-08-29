@@ -27,6 +27,7 @@ class KnowledgeClientTest(unittest.TestCase):
             "KNOWLEDGE_SSO_ISSUER": "https://sso.ixicai.cn/api",
             "KNOWLEDGE_SSO_CLIENT_ID": "georank-dofe-ai",
             "KNOWLEDGE_SSO_CLIENT_SECRET": "test-secret",
+            "KNOWLEDGE_SSO_SCOPE": "service:access",
             "KNOWLEDGE_TENANT_SLUG": "yootun",
             "KNOWLEDGE_TIMEOUT_SECONDS": 15.0,
             "KNOWLEDGE_VERIFY_TLS": True,
@@ -60,6 +61,7 @@ class KnowledgeClientTest(unittest.TestCase):
         self.assertEqual(http.post.await_count, 3)
         token_call = http.post.await_args_list[0]
         self.assertEqual(token_call.args[0], "https://sso.ixicai.cn/api/oauth/token")
+        self.assertEqual(token_call.kwargs["data"]["scope"], "service:access")
         search_call = http.post.await_args_list[1]
         self.assertEqual(search_call.args[0], "https://knowledge.local.dofe.ai/api/yootun/v1/search")
         self.assertEqual(search_call.kwargs["headers"]["X-Knowledge-Source-System"], "georank")
