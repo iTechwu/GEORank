@@ -89,6 +89,40 @@ class KnowledgeClientTest(unittest.TestCase):
 
         self.assertEqual(client._expires_at, 101.0)
 
+    def test_search_refreshes_a_rejected_token_once(self) -> None:
+        http = _AsyncClient([
+            self._response({"access_token": "stale-token", "expires_in": 300}),
+            self._response({"detail": "unauthorized"}, 401),
+            self._response({"access_token": "fresh-token", "expires_in": 300}),
+            self._response({"data": {"list": [], "total": 0, "page": 1, "limit": 5}}),
+        ])
+        client = KnowledgeClient()
+
+        with patch("app.services.knowledge_client.httpx.AsyncClient", return_value=http), patch(
+            "app.services.knowledge_client.settings", self._settings()
+        ):
+            result = asyncio.run(client.search("query"))
+
+        self.assertEqual(result["total"], 0)
+        self.assertEqual(http.post.await_count, 4)
+        self.assertEqual(http.post.await_args_list[1].kwargs["headers"]["Authorization"], "Bearer stale-token")
+        self.assertEqual(http.post.await_args_list[3].kwargs["headers"]["Authorization"], "Bearer fresh-token")
+
+    def test_search_does_not_retry_an_acl_rejection(self) -> None:
+        http = _AsyncClient([
+            self._response({"access_token": "token-1", "expires_in": 300}),
+            self._response({"detail": "forbidden"}, 403),
+        ])
+        client = KnowledgeClient()
+
+        with patch("app.services.knowledge_client.httpx.AsyncClient", return_value=http), patch(
+            "app.services.knowledge_client.settings", self._settings()
+        ):
+            with self.assertRaisesRegex(KnowledgeClientError, "HTTP 403"):
+                asyncio.run(client.search("query"))
+
+        self.assertEqual(http.post.await_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

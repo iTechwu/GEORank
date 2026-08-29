@@ -74,23 +74,17 @@ class KnowledgeClient:
         base_url = settings.KNOWLEDGE_API_URL.rstrip("/")
         if not self._allowlisted(base_url):
             raise KnowledgeClientError("knowledge API URL is not allow-listed")
-        token = await self._access_token()
-        async with httpx.AsyncClient(timeout=settings.KNOWLEDGE_TIMEOUT_SECONDS, verify=settings.KNOWLEDGE_VERIFY_TLS) as client:
-            response = await client.post(
-                f"{base_url}/yootun/v1/search",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "X-Knowledge-Source-System": "georank",
-                    "X-Knowledge-Tenant": settings.KNOWLEDGE_TENANT_SLUG,
-                    "X-API-Version": "1",
-                },
-                json={
-                    "query": query.strip(),
-                    "spaceIds": settings.knowledge_space_ids,
-                    "topK": max(1, min(50, top_k)),
-                    "includeMemories": include_memories,
-                },
-            )
+        payload = {
+            "query": query.strip(),
+            "spaceIds": settings.knowledge_space_ids,
+            "topK": max(1, min(50, top_k)),
+            "includeMemories": include_memories,
+        }
+        response = await self._search_request(base_url, payload)
+        if response.status_code == 401:
+            self._token = None
+            self._expires_at = 0.0
+            response = await self._search_request(base_url, payload)
         if response.status_code >= 400:
             raise KnowledgeClientError(f"knowledge search returned HTTP {response.status_code}")
         payload = response.json()
@@ -98,6 +92,20 @@ class KnowledgeClient:
         if not isinstance(data, dict) or not isinstance(data.get("list"), list):
             raise KnowledgeClientError("knowledge search response is invalid")
         return data
+
+    async def _search_request(self, base_url: str, payload: dict) -> httpx.Response:
+        token = await self._access_token()
+        async with httpx.AsyncClient(timeout=settings.KNOWLEDGE_TIMEOUT_SECONDS, verify=settings.KNOWLEDGE_VERIFY_TLS) as client:
+            return await client.post(
+                f"{base_url}/yootun/v1/search",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "X-Knowledge-Source-System": "georank",
+                    "X-Knowledge-Tenant": settings.KNOWLEDGE_TENANT_SLUG,
+                    "X-API-Version": "1",
+                },
+                json=payload,
+            )
 
 
 knowledge_client = KnowledgeClient()
