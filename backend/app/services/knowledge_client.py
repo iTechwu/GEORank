@@ -49,12 +49,15 @@ class KnowledgeClient:
             issuer = settings.KNOWLEDGE_SSO_ISSUER.rstrip("/")
             if not self._allowlisted(issuer):
                 raise KnowledgeClientError("knowledge SSO issuer is not allow-listed")
-            async with httpx.AsyncClient(timeout=settings.KNOWLEDGE_TIMEOUT_SECONDS, verify=settings.KNOWLEDGE_VERIFY_TLS) as client:
-                response = await client.post(
-                    f"{issuer}/oauth/token",
-                    data={"grant_type": "client_credentials", "scope": settings.KNOWLEDGE_SSO_SCOPE},
-                    auth=(settings.KNOWLEDGE_SSO_CLIENT_ID, settings.KNOWLEDGE_SSO_CLIENT_SECRET),
-                )
+            try:
+                async with httpx.AsyncClient(timeout=settings.KNOWLEDGE_TIMEOUT_SECONDS, verify=settings.KNOWLEDGE_VERIFY_TLS) as client:
+                    response = await client.post(
+                        f"{issuer}/oauth/token",
+                        data={"grant_type": "client_credentials", "scope": settings.KNOWLEDGE_SSO_SCOPE},
+                        auth=(settings.KNOWLEDGE_SSO_CLIENT_ID, settings.KNOWLEDGE_SSO_CLIENT_SECRET),
+                    )
+            except httpx.HTTPError as error:
+                raise KnowledgeClientError("knowledge SSO token request failed") from error
             if response.status_code >= 400:
                 oauth_error = ""
                 try:
@@ -106,17 +109,20 @@ class KnowledgeClient:
 
     async def _search_request(self, base_url: str, payload: dict) -> httpx.Response:
         token = await self._access_token()
-        async with httpx.AsyncClient(timeout=settings.KNOWLEDGE_TIMEOUT_SECONDS, verify=settings.KNOWLEDGE_VERIFY_TLS) as client:
-            return await client.post(
-                f"{base_url}/yootun/v1/search",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "X-Knowledge-Source-System": "georank",
-                    "X-Knowledge-Tenant": settings.KNOWLEDGE_TENANT_SLUG,
-                    "X-API-Version": "1",
-                },
-                json=payload,
-            )
+        try:
+            async with httpx.AsyncClient(timeout=settings.KNOWLEDGE_TIMEOUT_SECONDS, verify=settings.KNOWLEDGE_VERIFY_TLS) as client:
+                return await client.post(
+                    f"{base_url}/yootun/v1/search",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "X-Knowledge-Source-System": "georank",
+                        "X-Knowledge-Tenant": settings.KNOWLEDGE_TENANT_SLUG,
+                        "X-API-Version": "1",
+                    },
+                    json=payload,
+                )
+        except httpx.HTTPError as error:
+            raise KnowledgeClientError("knowledge search request failed") from error
 
 
 knowledge_client = KnowledgeClient()

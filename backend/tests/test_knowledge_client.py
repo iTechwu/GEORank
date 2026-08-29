@@ -5,6 +5,8 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
+
 from app.services.knowledge_client import KnowledgeClient, KnowledgeClientError
 
 
@@ -145,6 +147,21 @@ class KnowledgeClientTest(unittest.TestCase):
                 asyncio.run(client.search("query"))
 
         self.assertNotIn("upstream-sensitive-detail", str(error.exception))
+
+    def test_transport_failure_is_reported_without_network_details(self) -> None:
+        http = _AsyncClient([httpx.ConnectError("private-network-detail")])
+        client = KnowledgeClient()
+
+        with patch("app.services.knowledge_client.httpx.AsyncClient", return_value=http), patch(
+            "app.services.knowledge_client.settings", self._settings()
+        ):
+            with self.assertRaisesRegex(
+                KnowledgeClientError,
+                r"knowledge SSO token request failed$",
+            ) as error:
+                asyncio.run(client.search("query"))
+
+        self.assertNotIn("private-network-detail", str(error.exception))
 
 
 if __name__ == "__main__":
