@@ -61,7 +61,11 @@ class KnowledgeClient:
             if not token:
                 raise KnowledgeClientError("knowledge SSO token response is invalid")
             self._token = token
-            self._expires_at = time.time() + max(30, int(payload.get("expires_in", 300)) - 30)
+            try:
+                expires_in = int(payload.get("expires_in", 300))
+            except (TypeError, ValueError):
+                expires_in = 300
+            self._expires_at = time.time() + max(1, expires_in - 30)
             return token
 
     async def search(self, query: str, *, top_k: int = 5, include_memories: bool = True) -> dict:
