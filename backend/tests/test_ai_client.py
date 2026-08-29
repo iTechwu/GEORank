@@ -73,6 +73,22 @@ class _StreamingClient:
 
 
 class AIClientFallbackTests(unittest.IsolatedAsyncioTestCase):
+    def test_remote_knowledge_context_is_citable_and_bounded(self):
+        context, hit_count = AIClient._format_remote_knowledge_context(
+            {
+                "list": [
+                    {"title": "Policy", "content": "A" * 100},
+                    {"title": "Guide", "content": "B" * 100},
+                ]
+            },
+            max_chars=80,
+        )
+
+        self.assertTrue(context.startswith("[K1] Policy"))
+        self.assertLessEqual(len(context), 80)
+        self.assertNotIn("### knowledge", context)
+        self.assertEqual(hit_count, 1)
+
     async def test_runtime_client_rejects_private_provider_before_client_creation(self):
         client = AIClient()
         with self.assertRaises(ValueError), patch("openai.AsyncOpenAI") as openai_client:

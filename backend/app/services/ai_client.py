@@ -626,16 +626,9 @@ class AIClient:
             return ""
         try:
             result = await knowledge_client.search(query, top_k=5, include_memories=True)
-            parts = []
-            for hit in result.get("list", []):
-                if not isinstance(hit, dict):
-                    continue
-                content = str(hit.get("content", "")).strip()
-                if content:
-                    parts.append(f"\n### knowledge: {str(hit.get('title', 'evidence')).strip()}\n{content}")
-            remote = "".join(parts)
+            remote, hit_count = self._format_remote_knowledge_context(result, max_chars=4000)
             if mode == "shadow":
-                logger.info("knowledge shadow search completed", extra={"hit_count": len(parts)})
+                logger.info("knowledge shadow search completed", extra={"hit_count": hit_count})
                 return ""
             return remote
         except (KnowledgeClientError, httpx.HTTPError) as error:
@@ -643,6 +636,26 @@ class AIClient:
             if mode == "primary":
                 raise
             return ""
+
+    @staticmethod
+    def _format_remote_knowledge_context(result: dict, *, max_chars: int) -> tuple[str, int]:
+        parts: list[str] = []
+        used = 0
+        for index, hit in enumerate(result.get("list", [])[:5], start=1):
+            if not isinstance(hit, dict):
+                continue
+            content = str(hit.get("content", "")).strip()
+            if not content:
+                continue
+            title = str(hit.get("title", "evidence")).strip() or "evidence"
+            header = f"[K{index}] {title}\n"
+            remaining = max_chars - used - len(header)
+            if remaining <= 0:
+                break
+            part = header + content[:remaining]
+            parts.append(part)
+            used += len(part) + 2
+        return "\n\n".join(parts), len(parts)
 
     async def rag_recommend_stream(
         self,
