@@ -149,3 +149,4 @@ networks:
   # dofe 部署外部共享网络：用于解析集中式 dofe-postgres / dofe-redis
   common_network:
     external: true
+    name: common_network

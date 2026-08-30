@@ -61,7 +61,7 @@ class McpAuthConfig:
     sso_timeout_seconds: float
     gateway_secret: str = ""
     gateway_only: bool = False
-    models_base_url: str = "https://models.test.dofe.ai/api/v1"
+    models_base_url: str = "https://ixicai.cn/api/v1"
     models_chat_model: str = ""
     models_embedding_model: str = ""
 
@@ -84,7 +84,7 @@ class McpAuthConfig:
             gateway_only=_env_bool("GEORANK_MCP_GATEWAY_ONLY", False),
             models_base_url=os.environ.get(
                 "GEORANK_MCP_MODELS_BASE_URL",
-                "https://models.test.dofe.ai/api/v1",
+                "https://ixicai.cn/api/v1",
             ).strip().rstrip("/"),
             models_chat_model=os.environ.get(
                 "GEORANK_MCP_LLM_MODEL", os.environ.get("LLM_MODEL", "")
