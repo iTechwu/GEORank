@@ -40,10 +40,7 @@ class ContainerMigrationContractTests(unittest.TestCase):
             services["migrate"]["command"],
             ["python", "-m", "app.scripts.migrate"],
         )
-        self.assertEqual(
-            services["migrate"]["depends_on"]["postgres"]["condition"],
-            "service_healthy",
-        )
+        self.assertNotIn("depends_on", services["migrate"])
         self.assertNotIn("env_file", services["migrate"])
         self.assertEqual(
             set(services["migrate"]["environment"]),
@@ -80,10 +77,13 @@ class ContainerMigrationContractTests(unittest.TestCase):
 
         config.validate_production_security()
 
-    def test_postgres_healthcheck_uses_configured_database_and_user(self):
-        command = self.compose["services"]["postgres"]["healthcheck"]["test"][-1]
-        self.assertIn("$${POSTGRES_USER}", command)
-        self.assertIn("$${POSTGRES_DB}", command)
+    def test_shared_databases_are_not_embedded_in_compose(self):
+        for service_name in ("postgres", "redis", "rabbitmq"):
+            with self.subTest(service=service_name):
+                self.assertNotIn(service_name, self.compose["services"])
+                self.assertNotIn(service_name, self.contract["services"])
+
+        self.assertTrue(self.compose["networks"]["common_network"]["external"])
 
     def test_compose_services_remain_project_isolated(self):
         for service_name, service in self.compose["services"].items():

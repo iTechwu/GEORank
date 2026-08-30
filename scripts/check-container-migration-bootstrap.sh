@@ -8,20 +8,77 @@ compose_file="$repo_root/docker-compose.yml"
 contract_override="$repo_root/docker-compose.migration-contract.yml"
 project="georank-migration-contract-${GITHUB_RUN_ID:-local}-$$"
 compose=(docker compose -f "$compose_file" -f "$contract_override" -p "$project")
+database_created=0
+network_created=0
+
+database_contract() {
+  local action="$1"
+  local sql="${2:-}"
+  CONTRACT_DB_ACTION="$action" CONTRACT_DB_SQL="$sql" \
+    "${compose[@]}" run --rm -T --no-deps --entrypoint python \
+      -e CONTRACT_DB_ACTION -e CONTRACT_DB_SQL api -c '
+import asyncio
+import os
+
+import asyncpg
+
+async def main():
+    action = os.environ["CONTRACT_DB_ACTION"]
+    database = "postgres" if action in {"create", "destroy"} else os.environ["POSTGRES_DB"]
+    connection = await asyncpg.connect(
+        host=os.environ["POSTGRES_HOST"],
+        port=int(os.environ["POSTGRES_PORT"]),
+        user=os.environ["POSTGRES_USER"],
+        password=os.environ["POSTGRES_PASSWORD"],
+        database=database,
+    )
+    try:
+        if action in {"create", "destroy"}:
+            await connection.execute(
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
+                "WHERE datname = $1 AND pid <> pg_backend_pid()",
+                "georank_contract",
+            )
+            await connection.execute("DROP DATABASE IF EXISTS georank_contract")
+            if action == "create":
+                await connection.execute("CREATE DATABASE georank_contract")
+        elif action == "query":
+            value = await connection.fetchval(os.environ["CONTRACT_DB_SQL"])
+            print(value)
+        else:
+            await connection.execute(os.environ["CONTRACT_DB_SQL"])
+    finally:
+        await connection.close()
+
+asyncio.run(main())
+'
+}
 
 cleanup() {
+  if test "$database_created" = "1"; then
+    database_contract destroy >/dev/null 2>&1 || true
+  fi
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true
   docker image rm "${project}-api" "${project}-migrate" >/dev/null 2>&1 || true
+  if test "$network_created" = "1"; then
+    docker network rm common_network >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
+
+if ! docker network inspect common_network >/dev/null 2>&1; then
+  docker network create common_network >/dev/null
+  network_created=1
+fi
 
 echo "EFFECTIVE_PRODUCTION_COMPOSE: validate the merged production service graph"
 "${compose[@]}" config --format json | python3 -c '
 import json, sys
 config = json.load(sys.stdin)
 services = config["services"]
-required = {"traefik", "frontend", "api", "worker", "beat", "crawler", "migrate", "postgres", "redis", "qdrant", "neo4j"}
+required = {"traefik", "frontend", "api", "worker", "beat", "crawler", "migrate", "qdrant"}
 assert required.issubset(services)
+assert not {"postgres", "redis", "rabbitmq"}.intersection(services)
 assert services["migrate"]["command"] == ["python", "-m", "app.scripts.migrate"]
 assert set(services["migrate"]["environment"]) == {
     "DEBUG", "POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"
@@ -34,7 +91,7 @@ for service_name in ("traefik", "frontend"):
         "mode": "ingress", "host_ip": "127.0.0.1", "target": 80,
         "published": "0", "protocol": "tcp"
     }]
-for service_name in ("api", "postgres", "redis", "qdrant", "neo4j", "minio"):
+for service_name in ("api", "qdrant"):
     assert not services[service_name].get("ports")
 assert not services["api"].get("volumes")
 assert all(
@@ -50,7 +107,8 @@ assert traefik_config_mount["read_only"] is True
 
 echo "FRESH_DATABASE: build the production API image and migrate an empty database"
 "${compose[@]}" build api migrate
-"${compose[@]}" up -d --wait postgres
+database_contract create
+database_created=1
 
 echo "DIRECT_ENTRYPOINT_FAIL_CLOSED: application image rejects an empty database"
 set +e
@@ -71,12 +129,12 @@ wait "$second_migration"
 
 "${compose[@]}" up -d --wait api
 fresh_state=$(
-  "${compose[@]}" exec -T postgres \
-    psql -U georank -d georank_contract -Atc \
-    "SELECT (SELECT string_agg(version_num, ',') FROM alembic_version), (SELECT count(*) FROM expert_profiles);"
+  database_contract query \
+    "SELECT (SELECT string_agg(version_num, ',') FROM alembic_version) || '|' || (SELECT count(*)::text FROM expert_profiles)"
 )
 test "$fresh_state" = "016_merge_platform_iterations|5"
-"${compose[@]}" exec -T api curl --fail --silent http://localhost:8000/api/health >/dev/null
+"${compose[@]}" exec -T api python -c \
+  'import urllib.request; urllib.request.urlopen("http://localhost:8000/api/health", timeout=3).read()'
 expert_count=$(
   "${compose[@]}" exec -T api \
     python -c 'import json,urllib.request; data=json.load(urllib.request.urlopen("http://localhost:8000/api/experts")); print(len(data["items"]))'
@@ -127,16 +185,14 @@ printf '%s\n' "$traefik_logs" | grep -Eq 'GET /apix.*frontend@file'
 echo "IDEMPOTENT_RESTART: rerun the one-shot migrator at head"
 "${compose[@]}" run --rm migrate
 restart_state=$(
-  "${compose[@]}" exec -T postgres \
-    psql -U georank -d georank_contract -Atc \
-    "SELECT (SELECT string_agg(version_num, ',') FROM alembic_version), (SELECT count(*) FROM expert_profiles);"
+  database_contract query \
+    "SELECT (SELECT string_agg(version_num, ',') FROM alembic_version) || '|' || (SELECT count(*)::text FROM expert_profiles)"
 )
 test "$restart_state" = "$fresh_state"
 
 echo "LEGACY_FAIL_CLOSED: preserve a managed schema with no Alembic ownership"
 "${compose[@]}" stop api >/dev/null
-"${compose[@]}" exec -T postgres \
-  psql -U georank -d georank_contract -v ON_ERROR_STOP=1 -c \
+database_contract execute \
   "DROP SCHEMA public CASCADE; CREATE SCHEMA public; CREATE TABLE users(id uuid PRIMARY KEY);" \
   >/dev/null
 "${compose[@]}" rm -sf migrate api >/dev/null
@@ -158,10 +214,9 @@ if test -n "$api_container"; then
 fi
 
 legacy_state=$(
-  "${compose[@]}" exec -T postgres \
-    psql -U georank -d georank_contract -Atc \
-    "SELECT to_regclass('public.users') IS NOT NULL, to_regclass('public.alembic_version') IS NULL;"
+  database_contract query \
+    "SELECT (to_regclass('public.users') IS NOT NULL)::text || '|' || (to_regclass('public.alembic_version') IS NULL)::text"
 )
-test "$legacy_state" = "t|t"
+test "$legacy_state" = "true|true"
 
 echo "Container migration bootstrap contract passed"

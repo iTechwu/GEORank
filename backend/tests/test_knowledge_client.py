@@ -22,6 +22,18 @@ class _AsyncClient:
         return None
 
 
+class _SyncClient:
+    def __init__(self, responses: list[MagicMock]) -> None:
+        self.post = MagicMock(side_effect=responses[:1])
+        self.request = MagicMock(side_effect=responses[1:])
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+
 class KnowledgeClientTest(unittest.TestCase):
     def setUp(self) -> None:
         self.settings = {
@@ -162,6 +174,29 @@ class KnowledgeClientTest(unittest.TestCase):
                 asyncio.run(client.search("query"))
 
         self.assertNotIn("private-network-detail", str(error.exception))
+
+    def test_object_write_uses_knowledge_path_without_duplicate_api_prefix(self) -> None:
+        token_response = self._response({"access_token": "token-1", "expires_in": 300})
+        object_response = self._response(
+            {"data": {"key": "companies/1/raw.html", "sha256": "a" * 64}}
+        )
+        http = _SyncClient([token_response, object_response])
+        client = KnowledgeClient()
+
+        with patch("app.services.knowledge_client.httpx.Client", return_value=http), patch(
+            "app.services.knowledge_client.settings", self._settings()
+        ):
+            result = client.put_object("companies/1/raw.html", b"test", "text/html")
+
+        self.assertEqual(result["key"], "companies/1/raw.html")
+        request = http.request.call_args
+        self.assertEqual(request.args[0], "PUT")
+        self.assertEqual(
+            request.args[1],
+            "https://knowledge.local.dofe.ai/api/knowledge/integrations/objects",
+        )
+        self.assertNotIn("/api/api/", request.args[1])
+        self.assertEqual(request.kwargs["headers"]["X-Knowledge-Source-System"], "georank")
 
 
 if __name__ == "__main__":

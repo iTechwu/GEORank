@@ -520,12 +520,12 @@ async def _run_graph(
             if current_reservation_id != expected_reservation_id:
                 return
 
-        from app.services.graph_store import create_company_node, add_entities_and_relations
-        await create_company_node(company_id, {
+        from app.services.graph_store import upsert_company_graph
+        company_graph_properties = {
             "name": company.name,
             "url": company.url,
             "category": company.category or "",
-        })
+        }
         entities = [
             {
                 "name": node.get("name"),
@@ -547,7 +547,7 @@ async def _run_graph(
             {"from": relation.get("from"), "to": relation.get("to"), "type": relation.get("type")}
             for relation in rels
         ]
-        await add_entities_and_relations(company_id, entities, relations)
+        await upsert_company_graph(company_id, company_graph_properties, entities, relations)
 
         vector_status_update = update(Company).where(
             Company.id == uuid.UUID(company_id)

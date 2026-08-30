@@ -1,7 +1,6 @@
 """
 全局配置 — 从环境变量 / .env 文件加载
 """
-from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 from sqlalchemy.engine import URL
 from typing import List
@@ -73,23 +72,6 @@ class Settings(BaseSettings):
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "companies"
 
-    # ----- Neo4j 知识图谱 -----
-    NEO4J_URI: str = "bolt://neo4j:7687"
-    NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = "change-me-neo4j-password"
-
-    # ----- MinIO 对象存储 -----
-    MINIO_ENDPOINT: str = "minio:9000"
-    MINIO_ACCESS_KEY: str = Field(
-        default="change-me-minio-access-key",
-        validation_alias=AliasChoices("MINIO_ACCESS_KEY", "MINIO_USER"),
-    )
-    MINIO_SECRET_KEY: str = Field(
-        default="change-me-minio-secret-key",
-        validation_alias=AliasChoices("MINIO_SECRET_KEY", "MINIO_PASSWORD"),
-    )
-    MINIO_BUCKET: str = "georank-assets"
-
     # knowledge.dofe.ai is the canonical enterprise knowledge/memory/graph API.
     KNOWLEDGE_API_URL: str = ""
     KNOWLEDGE_SSO_ISSUER: str = "https://sso.ixicai.cn/api"
@@ -98,7 +80,7 @@ class Settings(BaseSettings):
     KNOWLEDGE_SSO_SCOPE: str = "service:access"
     KNOWLEDGE_TENANT_SLUG: str = "yootun"
     KNOWLEDGE_SPACE_IDS: str = ""
-    KNOWLEDGE_READ_MODE: str = "local"
+    KNOWLEDGE_READ_MODE: str = "primary"
     KNOWLEDGE_TIMEOUT_SECONDS: float = 15.0
     KNOWLEDGE_VERIFY_TLS: bool = True
 

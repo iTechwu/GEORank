@@ -38,7 +38,7 @@ georank
   ops
     rebuild-index
     sync-qdrant
-    sync-neo4j
+    sync-knowledge-graph
     repair-data
 ```
 

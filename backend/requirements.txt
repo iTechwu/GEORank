@@ -18,22 +18,18 @@ tiktoken==0.14.0
 langchain==0.3.14
 langchain-openai==0.3.0
 langchain-community==0.3.14
+# Pin resolver-selected compatible transitive versions to avoid multi-minute backtracking.
+langchain-core==0.3.63
+langchain-text-splitters==0.3.8
 
 # ===== Vector Database =====
 qdrant-client==1.12.1
 # numpy 无需限定 <2：python3.14(uhub) 下 1.x 无 wheel，放宽以安装 numpy 2.x。
 numpy>=1.26.4
 
-# ===== Knowledge Graph =====
-neo4j==5.27.0
-
 # ===== Web Crawler =====
-playwright==1.62.0
 beautifulsoup4==4.12.3
 lxml==6.1.2
-
-# ===== Object Storage =====
-boto3==1.35.86
 
 # ===== Auth =====
 python-jose[cryptography]==3.3.0
@@ -53,3 +49,4 @@ Pillow==12.1.1
 
 # ===== MCP (Model Context Protocol) =====
 mcp==1.14.0
+sse-starlette==3.0.3

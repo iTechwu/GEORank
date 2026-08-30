@@ -1,16 +1,5 @@
-"""
-知识图谱服务 — Neo4j
-负责公司实体关系的存储与查询
-"""
-from neo4j import AsyncGraphDatabase
-from app.core.config import settings
-
-def _new_driver():
-    """Create a loop-local driver so task runners can close it deterministically."""
-    return AsyncGraphDatabase.driver(
-        settings.NEO4J_URI,
-        auth=(settings.NEO4J_USER, settings.NEO4J_PASSWORD),
-    )
+"""Company graph adapter backed exclusively by knowledge.dofe.ai."""
+from app.services.knowledge_client import knowledge_client
 
 _ALLOWED_ENTITY_LABELS = frozenset({"Person", "Product", "Technology", "Company"})
 _ALLOWED_RELATIONSHIP_TYPES = frozenset(
@@ -38,103 +27,29 @@ def _validate_graph_payload(entities: list[dict], relations: list[dict]) -> None
             raise ValueError("图谱关系端点不能为空")
 
 
-async def create_company_node(company_id: str, properties: dict):
-    """创建公司节点，并清理该公司上一轮图谱连接。"""
-    async with _new_driver() as driver:
-        async with driver.session() as session:
-            await session.run(
-                """
-                MERGE (c:Company {id: $id})
-                SET c += $props
-                WITH c
-                OPTIONAL MATCH (c)-[link:HAS_ENTITY]->(old)
-                DELETE link
-                """,
-                id=company_id,
-                props=properties,
-            )
-
-
-async def add_entities_and_relations(company_id: str, entities: list[dict], relations: list[dict]):
-    """
-    将 LLM 抽取的实体和关系写入知识图谱
-    entities: [{"name": "...", "type": "Product|Person|Technology", "props": {...}}]
-    relations: [{"from": "...", "to": "...", "type": "HAS_PRODUCT|FOUNDED_BY|USES_TECH"}]
-    """
+async def upsert_company_graph(
+    company_id: str,
+    properties: dict,
+    entities: list[dict],
+    relations: list[dict],
+) -> dict:
+    """Replace the complete company graph through the Knowledge authority."""
     _validate_graph_payload(entities, relations)
-
-    async with _new_driver() as driver:
-        async with driver.session() as session:
-            for entity in entities:
-                await session.run(
-                    f"""
-                    MERGE (e:{entity['type']} {{company_id: $company_id, name: $name}})
-                    SET e += $props
-                    MERGE (c:Company {{id: $company_id}})
-                    MERGE (c)-[:HAS_ENTITY]->(e)
-                    """,
-                    name=entity["name"],
-                    props=entity.get("props", {}),
-                    company_id=company_id,
-                )
-
-            for rel in relations:
-                await session.run(
-                    f"""
-                    MATCH (a {{company_id: $company_id, name: $from_name}})
-                    MATCH (b {{company_id: $company_id, name: $to_name}})
-                    MERGE (a)-[:{rel['type']}]->(b)
-                    """,
-                    company_id=company_id,
-                    from_name=rel["from"],
-                    to_name=rel["to"],
-                )
+    nodes = [
+        {
+            "name": str(entity["name"]).strip(),
+            "type": entity["type"],
+            "properties": entity.get("props", {}),
+        }
+        for entity in entities
+    ]
+    return await knowledge_client.put_graph_snapshot(company_id, properties, nodes, relations)
 
 
 async def get_company_graph(company_id: str) -> dict:
-    """获取某公司的完整知识图谱（节点 + 关系）"""
-    async with _new_driver() as driver:
-        async with driver.session() as session:
-            node_result = await session.run(
-                """
-                MATCH (c:Company {id: $id})-[:HAS_ENTITY]->(n)
-                RETURN labels(n) AS labels, properties(n) AS props
-                LIMIT 100
-                """,
-                id=company_id,
-            )
-            nodes = []
-            async for record in node_result:
-                properties = dict(record["props"] or {})
-                name = str(properties.pop("name", "")).strip()
-                if not name:
-                    continue
-                labels = list(record["labels"] or [])
-                nodes.append(
-                    {
-                        "name": name,
-                        "type": labels[0] if labels else "Entity",
-                        "properties": properties,
-                    }
-                )
-
-            relation_result = await session.run(
-                """
-                MATCH (c:Company {id: $id})-[:HAS_ENTITY]->(a),
-                      (c)-[:HAS_ENTITY]->(b),
-                      (a)-[r]->(b)
-                RETURN a.name AS source, type(r) AS type, b.name AS target
-                LIMIT 200
-                """,
-                id=company_id,
-            )
-            relationships = [
-                {
-                    "from": record["source"],
-                    "type": record["type"],
-                    "to": record["target"],
-                }
-                async for record in relation_result
-                if record["source"] and record["target"]
-            ]
-            return {"nodes": nodes, "relationships": relationships}
+    """Read the authoritative PostgreSQL-backed snapshot through Knowledge."""
+    snapshot = await knowledge_client.get_graph_snapshot(company_id)
+    return {
+        "nodes": snapshot.get("nodes", []),
+        "relationships": snapshot.get("relationships", []),
+    }

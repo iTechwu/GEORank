@@ -68,10 +68,8 @@ services:
         condition: service_completed_successfully
       qdrant:
         condition: service_started
-      neo4j:
-        condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8000/api/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3).read()"]
       interval: 5s
       timeout: 5s
       retries: 12
@@ -124,34 +122,7 @@ services:
     networks:
       - georank-net
 
-  # ---------- 10. Neo4j 知识图谱数据库 ----------
-  neo4j:
-    image: neo4j:5.26.29-community@sha256:d9dd3dc7d1c78fa959191ff02dbdcbefadceaf83eee23428fb92a58cac8ad3fe
-    restart: always
-    environment:
-      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-change-me-neo4j-password}
-      NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_server_memory_heap_initial__size: 256m
-      NEO4J_server_memory_heap_max__size: 512m
-    volumes:
-      - neo4j_data:/data
-    networks:
-      - georank-net
-
-  # ---------- 11. MinIO 对象存储 ----------
-  minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e
-    restart: always
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-change-me-minio-access-key}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-change-me-minio-secret-key}
-    volumes:
-      - minio_data:/data
-    networks:
-      - georank-net
-
-  # ---------- 12. Playwright 爬虫沙箱 ----------
+  # ---------- 10. Playwright 爬虫沙箱 ----------
   crawler:
     build:
       context: ./backend
@@ -164,8 +135,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      minio:
-        condition: service_started
     networks:
       - georank-net
       - common_network
@@ -173,8 +142,6 @@ services:
 volumes:
   traefik_acme:
   qdrant_data:
-  neo4j_data:
-  minio_data:
 
 networks:
   georank-net:
