@@ -3,7 +3,7 @@ API 路由汇总
 """
 from fastapi import APIRouter
 
-from app.api.routes import auth, companies, diagnostics, solutions, content, admin, settings, keywords, experts, usage
+from app.api.routes import auth, companies, diagnostics, solutions, content, admin, settings, keywords, experts, usage, public_yootun
 
 router = APIRouter()
 
@@ -17,3 +17,4 @@ router.include_router(experts.router,      prefix="/experts",     tags=["专家"
 router.include_router(usage.router,        prefix="/usage",       tags=["AI 用量"])
 router.include_router(admin.router,        prefix="/admin",       tags=["后台管理"])
 router.include_router(settings.router,     prefix="/settings",    tags=["站点配置"])
+router.include_router(public_yootun.router, prefix="/yootun/v1", tags=["Yootun 公共 API"])
