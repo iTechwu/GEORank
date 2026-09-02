@@ -94,7 +94,7 @@ test('Compose and Dockerfiles use immutable multi-architecture image references'
   );
   assert.equal(
     contract.crawlerBase,
-    'mcr.microsoft.com/playwright/python:v1.49.1-jammy@sha256:a34c7c0c74cc5c94f39bedbee2cb220b1e0c0408c78610eade5ab1db32c3294f',
+    'uhub.service.ucloud.cn/techwu/python:v1.49.1-jammy',
   );
 });
 
