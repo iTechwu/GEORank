@@ -35,6 +35,7 @@ TOOL_CALLS = [
     (server.georank_generate_title, ("优惠豚：一个优惠信息平台",)),
     (server.georank_generate_knowledge_base, ("优惠豚：一个优惠信息平台",)),
     (server.georank_list_companies, ()),
+    (server.georank_overview, ()),
     (server.georank_get_company, ("youhuitun",)),
     (server.georank_company_similar, ("youhuitun",)),
     (server.georank_company_pipeline_status, ("00000000-0000-0000-0000-000000000001",)),

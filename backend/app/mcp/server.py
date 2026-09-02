@@ -167,6 +167,58 @@ async def georank_company_pipeline_status(company_id: str) -> dict:
     })
 
 
+@mcp.tool()
+@require_mcp_ability("georank:companies:read")
+async def georank_overview() -> dict:
+    """Return aggregate statistics for the public GEORank company directory.
+
+    GEORank's catalog is currently global rather than tenant-owned. This tool
+    deliberately exposes only published, public directory aggregates and never
+    reuses the administrator dashboard (which contains private operational data).
+    """
+    published = Company.publish_status == PublishStatus.PUBLISHED
+    async with open_session() as db:
+        total = (await db.execute(select(func.count(Company.id)).where(published))).scalar_one()
+        scored = (await db.execute(
+            select(func.count(Company.id)).where(published, Company.geo_score.isnot(None))
+        )).scalar_one()
+        average = (await db.execute(
+            select(func.avg(Company.geo_score)).where(published, Company.geo_score.isnot(None))
+        )).scalar_one()
+        rows = (await db.execute(
+            select(Company.category, func.count(Company.id))
+            .where(published)
+            .group_by(Company.category)
+            .order_by(func.count(Company.id).desc())
+            .limit(20)
+        )).all()
+        recent = (await db.execute(
+            select(Company)
+            .where(published)
+            .order_by(Company.created_at.desc())
+            .limit(10)
+        )).scalars().all()
+        distribution = {
+            "excellent": (await db.execute(select(func.count(Company.id)).where(published, Company.geo_score >= 80))).scalar_one(),
+            "good": (await db.execute(select(func.count(Company.id)).where(published, Company.geo_score >= 60, Company.geo_score < 80))).scalar_one(),
+            "average": (await db.execute(select(func.count(Company.id)).where(published, Company.geo_score >= 40, Company.geo_score < 60))).scalar_one(),
+            "poor": (await db.execute(select(func.count(Company.id)).where(published, Company.geo_score < 40))).scalar_one(),
+        }
+    return json_safe({
+        "scope": "public_directory",
+        "totals": {"publishedCompanies": total, "scoredCompanies": scored},
+        "averageGeoScore": round(float(average), 1) if average is not None else None,
+        "scoreDistribution": distribution,
+        "categories": [{"name": category or "uncategorized", "count": count} for category, count in rows],
+        "recentCompanies": [
+            {"id": str(company.id), "pathKey": company.path_key, "name": company.name,
+             "url": company.url, "category": company.category, "geoScore": company.geo_score,
+             "isGeoCertified": company.is_geo_certified}
+            for company in recent
+        ],
+    })
+
+
 # =============================================================================
 # GEO 诊断
 # =============================================================================
