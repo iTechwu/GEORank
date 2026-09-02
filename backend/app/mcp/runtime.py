@@ -8,6 +8,8 @@ from __future__ import annotations
 import enum as _std_enum
 import json
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,9 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import async_session
 
 
-async def open_session() -> AsyncSession:
-    """创建一个后端使用的异步会话（由调用方负责关闭）。"""
-    return async_session()
+@asynccontextmanager
+async def open_session() -> AsyncIterator[AsyncSession]:
+    """异步会话上下文管理器：进入时创建，退出时自动关闭。"""
+    async with async_session() as session:
+        yield session
 
 
 def json_safe(value):
