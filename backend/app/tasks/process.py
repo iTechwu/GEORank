@@ -588,7 +588,6 @@ async def _run_vectorize(
     from app.models.company import Company, PipelineStatus
     from app.services.ai_client import EmbeddingNotConfiguredError, ai_client
     from app.services.company_profile import load_company_source_text
-    from app.services.vector_store import vector_store
     from sqlalchemy import select, update
 
     async with async_session() as db:
@@ -671,10 +670,7 @@ async def _run_vectorize(
                     "metadata": {"chunk_index": i, "category": company.category or ""},
                 }
             )
-        if points:
-            vector_store.ensure_collection()
-            vector_store.delete_company_vectors(company_id)
-            vector_store.upsert_company_vectors(company_id, points)
+        # Knowledge owns vectorization and projection; GeoRank no longer writes Qdrant.
         vector_count = len(points)
 
         # 分析完成后仍保持原发布状态，等待用户明确提交审核。

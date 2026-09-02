@@ -67,11 +67,6 @@ class Settings(BaseSettings):
             return self.CELERY_BROKER_URL_EXTERNAL
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/1"
 
-    # ----- Qdrant 向量数据库 -----
-    QDRANT_HOST: str = "qdrant"
-    QDRANT_PORT: int = 6333
-    QDRANT_COLLECTION: str = "companies"
-
     # knowledge.dofe.ai is the canonical enterprise knowledge/memory/graph API.
     KNOWLEDGE_API_URL: str = ""
     KNOWLEDGE_SSO_ISSUER: str = "https://sso.ixicai.cn/api"

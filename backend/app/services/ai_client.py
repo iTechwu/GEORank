@@ -509,12 +509,11 @@ class AIClient:
     ) -> tuple[str, list]:
         """
         RAG 问答管道（非流式）：
-        1. 将用户问题向量化
-        2. 在 Qdrant 中检索 top-5 相关公司知识块
+        1. 将用户问题交由 Knowledge API 检索
+        2. 使用 Knowledge 返回的授权上下文
         3. 构建含检索上下文和频道规则的 Prompt → LLM 生成回答
         4. 返回 (回复文本, 关联公司列表)
         """
-        from app.services.vector_store import vector_store
         from app.services.company_retrieval import fallback_company_recommendations
         from app.services.runtime_settings import get_solution_template_config
         from sqlalchemy import select
@@ -522,14 +521,8 @@ class AIClient:
 
         # BYOK 请求只能使用用户自己的模型凭据。平台 Embedding 属于平台成本，
         # 因此 BYOK 路径直接使用数据库中的确定性推荐作为上下文。
+        # Knowledge owns embedding/vector/graph retrieval and ACL filtering.
         search_results = []
-        if provider_override is None:
-            try:
-                query_vector = await self.embed(message)
-                # Step 2: Qdrant 检索
-                search_results = vector_store.search_companies(query_vector, top_k=5)
-            except Exception:
-                search_results = []
 
         # Step 3: 获取公司详情
         company_ids = list({r["company_id"] for r in search_results if r.get("company_id")})
@@ -666,17 +659,10 @@ class AIClient:
         provider_override: Any | None = None,
     ) -> AsyncGenerator[dict, None]:
         """RAG 问答流式版本"""
-        from app.services.vector_store import vector_store
         from app.services.company_retrieval import fallback_company_recommendations
         from app.services.runtime_settings import get_solution_template_config
 
         search_results = []
-        if provider_override is None:
-            try:
-                query_vector = await self.embed(message)
-                search_results = vector_store.search_companies(query_vector, top_k=5)
-            except Exception:
-                search_results = []
         company_ids = list({r["company_id"] for r in search_results if r.get("company_id")})
 
         if not company_ids and db is not None:
