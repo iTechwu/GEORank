@@ -12,10 +12,6 @@ services:
     ports: !override
       - "127.0.0.1:0:80"
 
-  qdrant:
-    ports: !reset []
-    volumes: !reset []
-
   migrate:
     environment:
       DEBUG: "false"
@@ -42,7 +38,7 @@ services:
       POSTGRES_USER: georank
       POSTGRES_PASSWORD: test-contract-password
       REDIS_HOST: ${MIGRATION_CONTRACT_REDIS_HOST:-host.docker.internal}
-      QDRANT_HOST: qdrant
+      QDRANT_HOST: ${MIGRATION_CONTRACT_QDRANT_HOST:-host.docker.internal}
     ports: !reset []
     volumes: !reset []
     labels: !reset []

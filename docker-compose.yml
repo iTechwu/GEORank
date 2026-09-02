@@ -66,8 +66,6 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
-      qdrant:
-        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3).read()"]
       interval: 5s
@@ -76,6 +74,7 @@ services:
       start_period: 10s
     networks:
       - georank-net
+      - common_network
 
   # ---------- 5. Celery Worker (异步任务) ----------
   worker:
@@ -111,18 +110,7 @@ services:
       - georank-net
       - common_network
 
-  # ---------- 9. Qdrant 向量数据库 ----------
-  qdrant:
-    image: qdrant/qdrant:v1.12.1@sha256:d774e7bb65744454984c6021637a0da89271f30df15e48601a9fafc926d26b1f
-    restart: always
-    volumes:
-      - qdrant_data:/qdrant/storage
-    environment:
-      QDRANT__SERVICE__GRPC_PORT: 6334
-    networks:
-      - georank-net
-
-  # ---------- 10. Playwright 爬虫沙箱 ----------
+  # ---------- 9. Playwright 爬虫沙箱 ----------
   crawler:
     build:
       context: ./backend
@@ -141,7 +129,6 @@ services:
 
 volumes:
   traefik_acme:
-  qdrant_data:
 
 networks:
   georank-net:

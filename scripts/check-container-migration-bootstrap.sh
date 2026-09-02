@@ -76,7 +76,7 @@ echo "EFFECTIVE_PRODUCTION_COMPOSE: validate the merged production service graph
 import json, sys
 config = json.load(sys.stdin)
 services = config["services"]
-required = {"traefik", "frontend", "api", "worker", "beat", "crawler", "migrate", "qdrant"}
+required = {"traefik", "frontend", "api", "worker", "beat", "crawler", "migrate"}
 assert required.issubset(services)
 assert not {"postgres", "redis", "rabbitmq"}.intersection(services)
 assert services["migrate"]["command"] == ["python", "-m", "app.scripts.migrate"]
@@ -91,7 +91,7 @@ for service_name in ("traefik", "frontend"):
         "mode": "ingress", "host_ip": "127.0.0.1", "target": 80,
         "published": "0", "protocol": "tcp"
     }]
-for service_name in ("api", "qdrant"):
+for service_name in ("api",):
     assert not services[service_name].get("ports")
 assert not services["api"].get("volumes")
 assert all(

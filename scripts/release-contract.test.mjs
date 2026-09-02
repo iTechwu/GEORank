@@ -87,7 +87,6 @@ test('Compose and Dockerfiles use immutable multi-architecture image references'
   assert.deepEqual(contract.images, {
     traefik: 'traefik:v3.7.10@sha256:9c3b91d5fb7770853ca5c1124a23c34bf2d9b47ffaebeab2614cbaf410dcb2ac',
     frontend: 'nginx:1.31.3-alpine@sha256:4a73073bd557c65b759505da037898b61f1be6cbcc3c2c3aeac22d2a470c1752',
-    qdrant: 'qdrant/qdrant:v1.12.1@sha256:d774e7bb65744454984c6021637a0da89271f30df15e48601a9fafc926d26b1f',
   });
   assert.equal(
     contract.backendBase,
@@ -121,7 +120,7 @@ test('production gateway uses only the file provider and Compose service DNS', (
     '${GEORANK_HTTPS_PORT:-443}:443',
   ]);
   for (const serviceName of [
-    'frontend', 'api', 'qdrant',
+    'frontend', 'api',
   ]) {
     assert.equal(
       compose.services[serviceName].ports,
