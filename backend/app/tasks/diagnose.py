@@ -36,7 +36,7 @@ async def _finalize_diagnostic_failure(
     reservation_id: str | uuid.UUID | None = None,
 ) -> None:
     from app.core.database import async_session
-    from app.models.diagnostic import DiagnosticReport, DiagnosticStatus
+    from app.models.diagnostic import DiagnosticReport
     from app.services.ai_usage import record_async_task_usage
     from sqlalchemy import select
 
@@ -470,6 +470,7 @@ async def _llm_recommendations(
     meta: dict,
     content: dict,
     citation: dict,
+    provider_override=None,
 ) -> tuple[dict, bool]:
     """调用 LLM 生成优先级排序的优化建议"""
     from app.services.ai_client import ai_client
@@ -504,7 +505,12 @@ Meta 评分: {meta['score']}/100，缺失: {meta['missing']}，预览得分: {me
 
     provider_succeeded = False
     try:
-        raw = await ai_client.complete(system, summary, temperature=0.2)
+        raw = await ai_client.complete(
+            system,
+            summary,
+            temperature=0.2,
+            provider_override=provider_override,
+        )
         provider_succeeded = True
         start, end = raw.find("{"), raw.rfind("}") + 1
         if start >= 0 and end > start:
@@ -618,6 +624,7 @@ async def _run_analysis(
     report_id: str,
     reservation_id: str | uuid.UUID | None = None,
     claim_id: str | None = None,
+    provider_override=None,
 ):
     from app.core.database import async_session
     from app.models.diagnostic import DiagnosticReport, DiagnosticStatus
@@ -660,20 +667,21 @@ async def _run_analysis(
                         "error_message": f"无法获取页面内容: {e}",
                     }))
                 )
-                from app.services.ai_usage import record_async_task_usage
-                await record_async_task_usage(
-                    db,
-                    module="diagnostics",
-                    user_id=report.user_id,
-                    reservation_id=report.ai_reservation_id,
-                    status_value="error",
-                    error_code="diagnostic_fetch_failed",
-                    metadata={
-                        "report_id": str(report.id),
-                        "async_task": True,
-                        "terminal_failure": True,
-                    },
-                )
+                if report.ai_reservation_id:
+                    from app.services.ai_usage import record_async_task_usage
+                    await record_async_task_usage(
+                        db,
+                        module="diagnostics",
+                        user_id=report.user_id,
+                        reservation_id=report.ai_reservation_id,
+                        status_value="error",
+                        error_code="diagnostic_fetch_failed",
+                        metadata={
+                            "report_id": str(report.id),
+                            "async_task": True,
+                            "terminal_failure": True,
+                        },
+                    )
                 await db.commit()
                 return
 
@@ -700,6 +708,7 @@ async def _run_analysis(
             meta,
             content,
             citation,
+            provider_override=provider_override,
         )
         if claim_id:
             from app.services.ai_usage import (
@@ -737,33 +746,39 @@ async def _run_analysis(
                 "recommendations": recommendations,
             }))
         )
-        from app.services.ai_usage import record_async_task_usage
-        await record_async_task_usage(
-            db,
-            module="diagnostics",
-            user_id=report.user_id,
-            reservation_id=report.ai_reservation_id,
-            input_text=f"{report.url}\n{html[:6000]}",
-            output_text=(
-                json.dumps(recommendations, ensure_ascii=False)
-                if provider_succeeded
-                else ""
-            ),
-            status_value="success" if provider_succeeded else "error",
-            error_code=None if provider_succeeded else "diagnostic_platform_fallback",
-            metadata={
-                "report_id": str(report.id),
-                "url": report.url,
-                "overall_score": overall,
-                "async_task": True,
-                "fallback_generated": not provider_succeeded,
-            },
-        )
+        if report.ai_reservation_id:
+            from app.services.ai_usage import record_async_task_usage
+            await record_async_task_usage(
+                db,
+                module="diagnostics",
+                user_id=report.user_id,
+                reservation_id=report.ai_reservation_id,
+                input_text=f"{report.url}\n{html[:6000]}",
+                output_text=(
+                    json.dumps(recommendations, ensure_ascii=False)
+                    if provider_succeeded
+                    else ""
+                ),
+                status_value="success" if provider_succeeded else "error",
+                error_code=None if provider_succeeded else "diagnostic_platform_fallback",
+                metadata={
+                    "report_id": str(report.id),
+                    "url": report.url,
+                    "overall_score": overall,
+                    "async_task": True,
+                    "fallback_generated": not provider_succeeded,
+                },
+            )
         await db.commit()
 
 
 @shared_task(name="app.tasks.diagnose.analyze_page", bind=True)
-def analyze_page(self, report_id: str, reservation_id: str | None = None):
+def analyze_page(
+    self,
+    report_id: str,
+    reservation_id: str | None = None,
+    models_credential: str | None = None,
+):
     """
     对爬取的页面进行 GEO 多维诊断:
     1. Schema 标签检测（确定性规则）
@@ -776,10 +791,19 @@ def analyze_page(self, report_id: str, reservation_id: str | None = None):
     provider_claim_id = f"{self.request.id}:{self.request.retries}"
     provider_stage = f"diagnostic_recommendations:{provider_claim_id}"
     try:
-        reservation_state = _run(_diagnostic_reservation_state(report_id, reservation_id))
-        if reservation_state in {"missing", "stale", "finished"}:
-            return
-        if reservation_state != "active":
+        provider_override = None
+        if models_credential:
+            from app.mcp.async_models_credential import open_async_models_credential
+
+            provider_override = open_async_models_credential(
+                models_credential,
+                report_id=report_id,
+            )
+        else:
+            reservation_state = _run(_diagnostic_reservation_state(report_id, reservation_id))
+            if reservation_state in {"missing", "stale", "finished"}:
+                return
+        if not models_credential and reservation_state != "active":
             async def _mark_inactive():
                 from app.core.database import async_session
                 from app.models.diagnostic import DiagnosticReport, DiagnosticStatus
@@ -816,7 +840,7 @@ def analyze_page(self, report_id: str, reservation_id: str | None = None):
             str(self.request.id),
         )):
             return
-        if not _run(_claim_diagnostic_provider_stage(
+        if not models_credential and not _run(_claim_diagnostic_provider_stage(
             reservation_id,
             provider_stage,
             provider_claim_id,
@@ -830,7 +854,12 @@ def analyze_page(self, report_id: str, reservation_id: str | None = None):
             report_id=report_id,
             retries=self.request.retries,
         )
-        _run(_run_analysis(report_id, reservation_id, provider_claim_id))
+        _run(_run_analysis(
+            report_id,
+            reservation_id,
+            None if models_credential else provider_claim_id,
+            provider_override,
+        ))
         log_event(
             logger,
             logging.INFO,
@@ -841,14 +870,16 @@ def analyze_page(self, report_id: str, reservation_id: str | None = None):
     except StageClaimBusy as exc:
         raise self.retry(exc=exc, countdown=60, max_retries=20)
     except Exception as exc:
-        try:
-            _run(_release_diagnostic_provider_stage(
-                reservation_id,
-                provider_stage,
-                provider_claim_id,
-            ))
-        except Exception:
-            pass
+        failure_message = str(exc)
+        if not models_credential:
+            try:
+                _run(_release_diagnostic_provider_stage(
+                    reservation_id,
+                    provider_stage,
+                    provider_claim_id,
+                ))
+            except Exception:
+                pass
         logger.exception("analyze_page failed: %s", report_id)
         log_event(
             logger,
@@ -857,7 +888,7 @@ def analyze_page(self, report_id: str, reservation_id: str | None = None):
             task_id=self.request.id,
             report_id=report_id,
             retries=self.request.retries,
-            error=str(exc)[:500],
+            error=failure_message[:500],
         )
         async def _mark_failed():
             from app.core.database import async_session
@@ -881,9 +912,9 @@ def analyze_page(self, report_id: str, reservation_id: str | None = None):
                             else DiagnosticStatus.ANALYZING
                         ),
                         "error_message": (
-                            str(exc)[:500]
+                            failure_message[:500]
                             if _is_final_attempt(self)
-                            else f"任务将自动重试：{str(exc)[:450]}"
+                            else f"任务将自动重试：{failure_message[:450]}"
                         ),
                     }))
                 )

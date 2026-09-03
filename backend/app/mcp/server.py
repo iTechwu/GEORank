@@ -229,35 +229,53 @@ async def georank_diagnose_url(url: str, company_id: str | None = None) -> dict:
 
     仅 URL 必须合法；诊断结果通过 georank_get_diagnostic_report 获取。
     """
-    if current_mcp_auth().credential_type == "models_api_key":
-        raise RuntimeError(
-            "公网 MCP 暂不支持需要异步模型任务的诊断；短期运行凭据接入后开放"
-        )
     try:
         normalized = normalize_company_url(url)
     except ValueError as exc:
         raise ValueError(f"无效 URL: {exc}") from exc
 
     async with open_session() as db:
-        access = await resolve_system_async_ai_access(
-            db=db, module="diagnostics", prompt_text=f"{normalized}\n{company_id or ''}"
+        auth = current_mcp_auth()
+        provider_override = (
+            current_models_provider_override()
+            if auth.credential_type == "models_api_key"
+            else None
         )
+        access = None
+        if provider_override is None:
+            access = await resolve_system_async_ai_access(
+                db=db, module="diagnostics", prompt_text=f"{normalized}\n{company_id or ''}"
+            )
         report = DiagnosticReport(
             url=normalized,
             company_id=uuid.UUID(company_id) if company_id else None,
             status=DiagnosticStatus.PENDING,
-            ai_reservation_id=access.reservation_id,
+            ai_reservation_id=access.reservation_id if access else None,
         )
         db.add(report)
         await db.commit()
         await db.refresh(report)
+
+        models_credential = None
+        if provider_override is not None:
+            from app.mcp.async_models_credential import seal_async_models_credential
+
+            models_credential = seal_async_models_credential(
+                provider_override,
+                report_id=str(report.id),
+            )
 
         queue_failed = False
         try:
             from app.core.celery_app import celery_app
             celery_app.send_task(
                 "app.tasks.crawl.crawl_diagnostic_page",
-                args=[str(report.id), normalized, str(access.reservation_id)],
+                args=[
+                    str(report.id),
+                    normalized,
+                    str(access.reservation_id) if access else None,
+                    models_credential,
+                ],
             )
         except Exception:  # pragma: no cover - 取决于 broker 可用性
             queue_failed = True

@@ -161,6 +161,7 @@ async def _update_report(
 async def _resume_diagnostic_analysis(
     report_id: str,
     reservation_id: str | uuid.UUID | None,
+    models_credential: str | None = None,
 ) -> bool:
     from app.core.database import async_session
     from app.core.celery_app import celery_app
@@ -186,7 +187,11 @@ async def _resume_diagnostic_analysis(
     try:
         celery_app.send_task(
             "app.tasks.diagnose.analyze_page",
-            args=[report_id, str(reservation_id) if reservation_id is not None else None],
+            args=[
+                report_id,
+                str(reservation_id) if reservation_id is not None else None,
+                models_credential,
+            ],
         )
     except Exception as exc:
         raise NextStageDispatchError(str(exc)) from exc
@@ -614,6 +619,7 @@ def crawl_diagnostic_page(
     report_id: str,
     url: str,
     reservation_id: str | None = None,
+    models_credential: str | None = None,
 ):
     """
     诊断用爬虫 — 爬取单个页面:
@@ -625,27 +631,33 @@ def crawl_diagnostic_page(
     from app.models.diagnostic import DiagnosticStatus
 
     try:
-        reservation_state = _run(_diagnostic_reservation_state(report_id, reservation_id))
-        if reservation_state in {"missing", "stale", "finished"}:
-            return
-        if reservation_state != "active":
-            _run(
-                _update_report(
-                    report_id,
-                    reservation_id=reservation_id,
-                    status=DiagnosticStatus.FAILED,
-                    error_message="AI 额度预占已失效，请重新发起诊断。",
-                )
-            )
-            from app.tasks.diagnose import _finalize_diagnostic_failure
+        has_models_credential = bool(models_credential)
+        if has_models_credential:
+            from app.mcp.async_models_credential import open_async_models_credential
 
-            _run(_finalize_diagnostic_failure(
-                report_id,
-                "diagnostic_reservation_inactive",
-                reservation_id,
-            ))
-            return
-        if _run(_resume_diagnostic_analysis(report_id, reservation_id)):
+            open_async_models_credential(models_credential, report_id=report_id)
+        else:
+            reservation_state = _run(_diagnostic_reservation_state(report_id, reservation_id))
+            if reservation_state in {"missing", "stale", "finished"}:
+                return
+            if reservation_state != "active":
+                _run(
+                    _update_report(
+                        report_id,
+                        reservation_id=reservation_id,
+                        status=DiagnosticStatus.FAILED,
+                        error_message="AI 额度预占已失效，请重新发起诊断。",
+                    )
+                )
+                from app.tasks.diagnose import _finalize_diagnostic_failure
+
+                _run(_finalize_diagnostic_failure(
+                    report_id,
+                    "diagnostic_reservation_inactive",
+                    reservation_id,
+                ))
+                return
+        if _run(_resume_diagnostic_analysis(report_id, reservation_id, models_credential)):
             return
         log_event(
             logger,
@@ -682,7 +694,7 @@ def crawl_diagnostic_page(
         try:
             celery_app.send_task(
                 "app.tasks.diagnose.analyze_page",
-                args=[report_id, reservation_id],
+                args=[report_id, reservation_id, models_credential],
             )
         except Exception as exc:
             raise NextStageDispatchError(str(exc)) from exc
