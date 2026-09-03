@@ -508,7 +508,7 @@ Meta 评分: {meta['score']}/100，缺失: {meta['missing']}，预览得分: {me
         raw = await ai_client.complete(
             system,
             summary,
-            temperature=0.2,
+            temperature=1.0,
             provider_override=provider_override,
         )
         provider_succeeded = True

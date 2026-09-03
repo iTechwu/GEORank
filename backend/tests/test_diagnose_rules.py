@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 from bs4 import BeautifulSoup
 
@@ -12,6 +13,7 @@ from app.tasks.diagnose import (  # noqa: E402
     _check_content,
     _check_meta,
     _check_schema,
+    _llm_recommendations,
 )
 
 
@@ -170,6 +172,29 @@ class DiagnoseRuleTests(unittest.TestCase):
         self.assertEqual(result["internal_link_count"], 1)
         self.assertEqual(result["authority_link_count"], 1)
         self.assertEqual(result["social_link_count"], 1)
+
+
+class DiagnoseRecommendationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_models_recommendations_use_supported_temperature(self):
+        provider = object()
+        with patch(
+            "app.services.ai_client.ai_client.complete",
+            new_callable=AsyncMock,
+            return_value='{"summary": {"headline": "ok"}}',
+        ) as complete:
+            result, succeeded = await _llm_recommendations(
+                "https://example.test",
+                {"score": 60, "found_types": [], "missing_recommended": [], "has_org": True, "has_faq": True},
+                {"score": 70, "missing": [], "preview_score": 70, "checks": {}},
+                {"score": 80, "h1_count": 1, "character_count": 1000, "list_count": 1, "image_alt_ratio": 100, "has_single_h1": True, "first_para_quality": True},
+                {"score": 50, "external_link_count": 1, "authority_link_count": 1, "internal_link_count": 1},
+                provider_override=provider,
+            )
+
+        self.assertTrue(succeeded)
+        self.assertEqual(result["summary"]["headline"], "ok")
+        self.assertEqual(complete.await_args.kwargs["temperature"], 1.0)
+        self.assertIs(complete.await_args.kwargs["provider_override"], provider)
 
 
 if __name__ == "__main__":
