@@ -41,7 +41,8 @@ class DiagnosticReport(Base):
     recommendations: Mapped[dict | None] = mapped_column(JSONB)     # 优化建议
 
     # 原始数据
-    raw_html_key: Mapped[str | None] = mapped_column(String(500))   # MinIO key
+    raw_html_key: Mapped[str | None] = mapped_column(String(500))   # Legacy Knowledge object key
+    raw_html: Mapped[str | None] = mapped_column(Text)              # Ephemeral diagnostic input
     error_message: Mapped[str | None] = mapped_column(Text)
 
     # 关联

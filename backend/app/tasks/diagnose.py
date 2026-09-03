@@ -644,8 +644,8 @@ async def _run_analysis(
             return
 
         # 获取 HTML
-        html = None
-        if report.raw_html_key:
+        html = report.raw_html
+        if not html and report.raw_html_key:
             from app.services.storage import storage
             raw = storage.get(report.raw_html_key)
             if raw:
@@ -665,6 +665,7 @@ async def _run_analysis(
                     .values(**_normalize_update_values({
                         "status": DiagnosticStatus.FAILED,
                         "error_message": f"无法获取页面内容: {e}",
+                        "raw_html": None,
                     }))
                 )
                 if report.ai_reservation_id:
@@ -744,6 +745,7 @@ async def _run_analysis(
                 "meta_analysis": meta,
                 "citation_analysis": citation,
                 "recommendations": recommendations,
+                "raw_html": None,
             }))
         )
         if report.ai_reservation_id:
@@ -916,6 +918,7 @@ def analyze_page(
                             if _is_final_attempt(self)
                             else f"任务将自动重试：{failure_message[:450]}"
                         ),
+                        "raw_html": None if _is_final_attempt(self) else DiagnosticReport.raw_html,
                     }))
                 )
                 await db.commit()

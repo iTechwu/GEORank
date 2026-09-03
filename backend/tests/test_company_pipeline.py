@@ -1,7 +1,11 @@
 import unittest
 from unittest.mock import patch
 
-from app.tasks.crawl import persist_crawl_html
+from app.tasks.crawl import (
+    MAX_DIAGNOSTIC_HTML_CHARS,
+    bounded_diagnostic_html,
+    persist_crawl_html,
+)
 from app.services.storage import StorageService
 from app.services.knowledge_client import KnowledgeClientError
 
@@ -19,6 +23,14 @@ class _StorageProbe:
 
 
 class CompanyPipelineContractTests(unittest.TestCase):
+    def test_diagnostic_html_is_bounded_for_database_handoff(self):
+        html = "x" * (MAX_DIAGNOSTIC_HTML_CHARS + 10)
+
+        self.assertEqual(
+            len(bounded_diagnostic_html(html)),
+            MAX_DIAGNOSTIC_HTML_CHARS,
+        )
+
     def test_crawl_html_requires_durable_storage(self):
         with self.assertRaisesRegex(RuntimeError, "对象存储"):
             persist_crawl_html(

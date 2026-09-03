@@ -19,6 +19,7 @@ from app.tasks.runtime import run_async as _run
 from app.tasks.process import NextStageDispatchError, StageClaimBusy
 
 logger = logging.getLogger("georank.crawl")
+MAX_DIAGNOSTIC_HTML_CHARS = 2_000_000
 
 
 def _is_final_attempt(task) -> bool:
@@ -306,6 +307,11 @@ def persist_crawl_html(storage_service, key: str, html: str) -> None:
     stored = storage_service.get(key)
     if stored != payload:
         raise RuntimeError(f"对象存储回读校验失败：{key}")
+
+
+def bounded_diagnostic_html(html: str) -> str:
+    """Bound database-backed diagnostic input independently of page size."""
+    return html[:MAX_DIAGNOSTIC_HTML_CHARS]
 
 
 async def _plan_company_pages(
@@ -624,7 +630,7 @@ def crawl_diagnostic_page(
     """
     诊断用爬虫 — 爬取单个页面:
     1. 获取完整 HTML 源码
-    2. 上传到 MinIO
+    2. 将有界的分析输入暂存到诊断报告
     3. 更新 DiagnosticReport.status → 'analyzing'
     4. 链式触发: analyze_page
     """
@@ -677,16 +683,12 @@ def crawl_diagnostic_page(
         result = _crawl_page(url)
         html = result["html"]
 
-        # 上传到 MinIO
-        from app.services.storage import storage
-        raw_key = f"diagnostics/{report_id}/raw.html"
-        persist_crawl_html(storage, raw_key, html)
-
         _run(_update_report(
             report_id,
             reservation_id=reservation_id,
             status=DiagnosticStatus.ANALYZING,
-            raw_html_key=raw_key,
+            raw_html=bounded_diagnostic_html(html),
+            raw_html_key=None,
         ))
 
         # 链式触发分析任务
