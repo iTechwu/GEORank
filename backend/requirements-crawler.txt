@@ -1,2 +1,3 @@
 -r requirements.txt
+# Keep this version aligned with the Playwright base image in Dockerfile.crawler.
 playwright==1.62.0
