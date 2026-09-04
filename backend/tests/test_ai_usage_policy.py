@@ -244,7 +244,13 @@ class AiUsagePolicyApiTests(unittest.TestCase):
             self.assertEqual(kwargs["model"], "team-chat-custom")
             return "GATEWAY_OK"
 
-        with patch("app.services.ai_client.ai_client._raw_chat_complete", new=fake_raw_chat_complete):
+        with (
+            patch(
+                "app.services.ai_client.ai_client._remote_knowledge_context",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch("app.services.ai_client.ai_client._raw_chat_complete", new=fake_raw_chat_complete),
+        ):
             response = self.run_async(
                 self.client.post(
                     "/api/solutions/chat",
@@ -528,7 +534,13 @@ class AiUsagePolicyApiTests(unittest.TestCase):
             self.assertEqual(kwargs["model"], "deepseek-chat")
             return "BYOK_OK"
 
-        with patch("app.services.ai_client.ai_client._raw_chat_complete", new=fake_raw_chat_complete):
+        with (
+            patch(
+                "app.services.ai_client.ai_client._remote_knowledge_context",
+                new=AsyncMock(return_value=[]),
+            ),
+            patch("app.services.ai_client.ai_client._raw_chat_complete", new=fake_raw_chat_complete),
+        ):
             response = self.run_async(
                 self.client.post(
                     "/api/solutions/chat",

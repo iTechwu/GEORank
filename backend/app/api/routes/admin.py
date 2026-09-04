@@ -2524,6 +2524,14 @@ def _serialize_admin_user(user: User) -> dict:
     }
 
 
+def _reject_sso_owned_user_operation(operation: str) -> None:
+    if settings.SSO_AUTH_REQUIRED:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"{operation}由 sso.ixicai.cn 统一管理",
+        )
+
+
 async def _load_admin_user_or_404(db: DbSession, user_id: str) -> User:
     try:
         uid = uuid.UUID(user_id)
@@ -2786,6 +2794,7 @@ def _serialize_keyword_pack_detail(pack: KeywordPack, items: list[KeywordItem]) 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
 async def create_user_admin(data: AdminUserCreateRequest, db: DbSession, _: AdminUser):
     """后台创建用户。当前仅创建本地账号，不发送外部邀请邮件。"""
+    _reject_sso_owned_user_operation("用户创建")
     username = data.username.strip()
     email = str(data.email).strip()
     if not username:
@@ -2870,8 +2879,10 @@ async def update_user_admin(
     admin: AdminUser,
 ):
     """编辑用户资料、角色和状态"""
-    user = await _load_admin_user_or_404(db, user_id)
     updates = data.model_dump(exclude_unset=True)
+    if settings.SSO_AUTH_REQUIRED and updates.keys() & {"email", "username", "phone", "is_verified"}:
+        _reject_sso_owned_user_operation("用户身份资料")
+    user = await _load_admin_user_or_404(db, user_id)
 
     if "username" in updates and updates["username"] is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="用户名不能为空")
@@ -2936,6 +2947,7 @@ async def reset_user_password_admin(
     admin: AdminUser,
 ):
     """管理员重置用户密码"""
+    _reject_sso_owned_user_operation("用户密码")
     user = await _load_admin_user_or_404(db, user_id)
     if user.id == admin.id:
         raise HTTPException(status_code=400, detail="请通过个人中心修改当前管理员密码")
@@ -2956,6 +2968,7 @@ async def reset_user_password_admin(
 @router.delete("/users/{user_id}")
 async def delete_user_admin(user_id: str, db: DbSession, admin: AdminUser):
     """删除用户账号，并清理或匿名化关联数据"""
+    _reject_sso_owned_user_operation("用户删除")
     user = await _load_admin_user_or_404(db, user_id)
     if user.id == admin.id:
         raise HTTPException(status_code=400, detail="不能删除当前登录的管理员账号")

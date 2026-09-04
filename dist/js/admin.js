@@ -448,32 +448,15 @@
             <span class="text-sm text-red-600 font-medium">${escapeHtml(errMsg)}</span>
         </div>` : ''}
 
-        <form id="login-form" class="space-y-5">
-            <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">用户名</label>
-                <div class="relative">
-                    <span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 pointer-events-none" style="font-size:18px">person</span>
-                    <input id="login-username" type="text" value="admin"
-                        class="form-input pl-11 py-3 text-sm rounded-xl"
-                        placeholder="输入用户名" required autocomplete="username">
-                </div>
-            </div>
-            <div>
-                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">密码</label>
-                <div class="relative">
-                    <span class="absolute left-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-slate-400 pointer-events-none" style="font-size:18px">lock</span>
-                    <input id="login-pwd" type="password"
-                        class="form-input pl-11 py-3 text-sm rounded-xl"
-                        placeholder="输入密码" required autocomplete="current-password">
-                </div>
-            </div>
-            <button type="submit" id="login-btn"
+        <div class="space-y-5">
+            <p class="text-sm text-slate-500">GEORank 不维护独立账号或密码，请通过统一身份认证登录。</p>
+            <button type="button" id="login-btn"
                 class="btn btn-primary w-full py-3.5 rounded-xl text-sm font-bold tracking-wide flex items-center justify-center gap-2 mt-1"
                 style="background:linear-gradient(135deg,#2563EB,#1d4ed8);box-shadow:0 4px 14px rgba(37,99,235,0.35)">
                 <span class="material-symbols-outlined" style="font-size:18px">login</span>
-                登录后台
+                使用统一身份认证登录
             </button>
-        </form>
+        </div>
 
         <div class="mt-10 flex items-center justify-center gap-1.5 text-xs text-slate-400">
             <span class="material-symbols-outlined" style="font-size:14px">shield</span>
@@ -483,31 +466,11 @@
 </div>`;
         document.body.appendChild(modal);
 
-        // 密码框回车聚焦逻辑
-        modal.querySelector('#login-username').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); modal.querySelector('#login-pwd').focus(); }
-        });
-
-        modal.querySelector('#login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
+        modal.querySelector('#login-btn').addEventListener('click', () => {
             const btn = modal.querySelector('#login-btn');
             btn.innerHTML = '<span class="material-symbols-outlined animate-spin" style="font-size:18px">progress_activity</span> 登录中…';
             btn.disabled = true;
-            try {
-                const username = modal.querySelector('#login-username').value.trim();
-                const pwd = modal.querySelector('#login-pwd').value;
-                const data = await api('POST', '/api/auth/login', { username, password: pwd });
-                Auth.set(data.access_token);
-                const me = await api('GET', '/api/auth/me');
-                if (me.role !== 'admin') {
-                    Auth.clear();
-                    throw new Error('需要管理员权限');
-                }
-                modal.remove();
-                initPage();
-            } catch (err) {
-                showLoginModal(err.message);
-            }
+            window.location.assign('/api/auth/sso/start?return_to=%2Fadmin&locale=zh-CN');
         });
     }
 
@@ -4060,89 +4023,6 @@ ${pages.map(p => p === '…'
     let userPage = 1;
     let userFilters = { role: '', is_active: '', search: '' };
 
-    function openUserInviteModal() {
-        const overlay = document.createElement('div');
-        overlay.className = 'fixed inset-0 z-[9998] bg-slate-900/45 flex items-center justify-center p-4';
-        overlay.innerHTML = `
-<div class="admin-dialog bg-white rounded-2xl shadow-2xl w-full max-w-xl">
-    <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-        <div>
-            <h3 class="text-lg font-bold font-headline">邀请用户</h3>
-            <p class="text-sm text-slate-500 mt-1">创建一个本地账号。当前不会发送外部邮件，请线下同步初始密码。</p>
-        </div>
-        <button type="button" id="user-invite-close" class="w-9 h-9 rounded-lg hover:bg-slate-50 flex items-center justify-center">
-            <span class="material-symbols-outlined text-slate-400">close</span>
-        </button>
-    </div>
-    <form id="user-invite-form" class="p-6 space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label class="space-y-2 text-sm">
-                <span class="font-semibold text-slate-700">用户名</span>
-                <input name="username" autocomplete="username" class="form-input" required minlength="2" maxlength="100" placeholder="例如：ops_admin">
-            </label>
-            <label class="space-y-2 text-sm">
-                <span class="font-semibold text-slate-700">邮箱</span>
-                <input name="email" type="email" autocomplete="email" class="form-input" required placeholder="name@example.com">
-            </label>
-            <label class="space-y-2 text-sm">
-                <span class="font-semibold text-slate-700">手机号</span>
-                <input name="phone" autocomplete="tel" class="form-input" placeholder="可选">
-            </label>
-            <label class="space-y-2 text-sm">
-                <span class="font-semibold text-slate-700">角色</span>
-                <select name="role" class="form-input">
-                    <option value="user">普通用户</option>
-                    <option value="enterprise">企业用户</option>
-                    <option value="admin">管理员</option>
-                </select>
-            </label>
-        </div>
-        <label class="space-y-2 text-sm block">
-            <span class="font-semibold text-slate-700">初始密码</span>
-            <input name="password" type="password" autocomplete="new-password" class="form-input" required minlength="6" maxlength="128" placeholder="至少 6 位">
-        </label>
-        <div class="rounded-xl border border-amber-100 bg-amber-50/70 px-4 py-3 text-xs leading-5 text-amber-700">
-            管理员创建账号后，系统只保存本地登录凭证，不会触发邮件、短信或外部通知。
-        </div>
-        <div class="flex items-center justify-end gap-3 pt-2">
-            <button type="button" id="user-invite-cancel" class="btn admin-btn-secondary px-5 py-2 rounded-lg text-sm">取消</button>
-            <button type="submit" id="user-invite-submit" class="btn btn-primary px-5 py-2 rounded-lg text-sm">创建用户</button>
-        </div>
-    </form>
-</div>`;
-        document.body.appendChild(overlay);
-
-        const close = bindAdminDialogOverlay(overlay, () => overlay.remove());
-        overlay.querySelector('#user-invite-close')?.addEventListener('click', close);
-        overlay.querySelector('#user-invite-cancel')?.addEventListener('click', close);
-        overlay.addEventListener('click', (event) => {
-            if (event.target === overlay) close();
-        });
-        overlay.querySelector('#user-invite-form')?.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const submitBtn = overlay.querySelector('#user-invite-submit');
-            if (submitBtn) submitBtn.disabled = true;
-            const form = new FormData(event.currentTarget);
-            const payload = {
-                username: String(form.get('username') || '').trim(),
-                email: String(form.get('email') || '').trim(),
-                phone: String(form.get('phone') || '').trim() || null,
-                role: String(form.get('role') || 'user'),
-                password: String(form.get('password') || ''),
-            };
-            try {
-                await api('POST', '/api/admin/users', payload);
-                toast('用户已创建');
-                close();
-                userPage = 1;
-                await loadUsers();
-            } catch (err) {
-                toast(err.message, 'error');
-                if (submitBtn) submitBtn.disabled = false;
-            }
-        });
-    }
-
     async function openUserAiQuotaModal(userId, username) {
         if (!userId) return;
         let quota;
@@ -4264,7 +4144,7 @@ ${pages.map(p => p === '…'
         <div class="min-w-0">
             <p class="text-xs font-bold text-blue-600 uppercase tracking-widest">USER PROFILE</p>
             <h3 id="user-edit-title" class="text-lg font-bold font-headline mt-1 break-all">编辑用户 · ${escapeHtml(user.username || '未命名用户')}</h3>
-            <p class="text-sm text-slate-500 mt-1">修改账号资料、权限状态和登录密码。</p>
+            <p class="text-sm text-slate-500 mt-1">身份资料由 SSO 同步，此处管理权限和启用状态。</p>
         </div>
         <button type="button" id="user-edit-close" class="flex-shrink-0" aria-label="关闭编辑用户弹窗">
             <span class="material-symbols-outlined">close</span>
@@ -4280,15 +4160,15 @@ ${pages.map(p => p === '…'
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <label class="space-y-2 text-sm">
                     <span class="font-semibold text-slate-700">用户名</span>
-                    <input name="username" autocomplete="username" class="form-input" required minlength="2" maxlength="100" value="${escapeHtml(user.username || '')}">
+                    <input name="username" autocomplete="username" class="form-input" readonly value="${escapeHtml(user.username || '')}">
                 </label>
                 <label class="space-y-2 text-sm">
                     <span class="font-semibold text-slate-700">邮箱</span>
-                    <input name="email" type="email" autocomplete="email" class="form-input" required maxlength="200" value="${escapeHtml(user.email || '')}">
+                    <input name="email" type="email" autocomplete="email" class="form-input" readonly value="${escapeHtml(user.email || '')}">
                 </label>
                 <label class="space-y-2 text-sm">
                     <span class="font-semibold text-slate-700">手机号</span>
-                    <input name="phone" type="tel" autocomplete="tel" class="form-input" minlength="6" maxlength="30" placeholder="未绑定" value="${escapeHtml(user.phone || '')}">
+                    <input name="phone" type="tel" autocomplete="tel" class="form-input" readonly placeholder="未绑定" value="${escapeHtml(user.phone || '')}">
                 </label>
                 <label class="space-y-2 text-sm">
                     <span class="font-semibold text-slate-700">角色</span>
@@ -4306,7 +4186,7 @@ ${pages.map(p => p === '…'
                 </label>
                 <label class="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 flex items-center justify-between gap-4 text-sm font-semibold text-slate-700">
                     <span>邮箱已验证</span>
-                    <input name="is_verified" type="checkbox" ${user.is_verified ? 'checked' : ''}>
+                    <input name="is_verified" type="checkbox" ${user.is_verified ? 'checked' : ''} disabled>
                 </label>
             </div>
             ${isCurrentUser ? '<p class="rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-xs leading-5 text-blue-700">当前账号的角色和启用状态受保护。</p>' : ''}
@@ -4315,35 +4195,10 @@ ${pages.map(p => p === '…'
             </div>
         </form>
 
-        <div class="border-t border-slate-100"></div>
-
-        ${isCurrentUser ? `
         <section class="rounded-xl border border-slate-100 bg-slate-50 px-4 py-4">
-            <h4 class="text-sm font-bold text-slate-800">修改登录密码</h4>
-            <p class="text-xs leading-5 text-slate-500 mt-1">当前管理员请前往个人中心修改自己的登录密码。</p>
-        </section>` : `
-        <form id="user-password-form" class="space-y-5">
-            <div>
-                <h4 class="text-sm font-bold text-slate-800">直接重置登录密码</h4>
-                <p class="text-xs leading-5 text-slate-500 mt-1">输入两次新密码后立即生效，请将新密码安全告知用户。已有登录会话可能继续有效至会话过期。</p>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <label class="space-y-2 text-sm">
-                    <span class="font-semibold text-slate-700">新密码</span>
-                    <input name="new_password" type="password" autocomplete="new-password" class="form-input" required minlength="6" maxlength="128" placeholder="至少 6 位">
-                </label>
-                <label class="space-y-2 text-sm">
-                    <span class="font-semibold text-slate-700">确认新密码</span>
-                    <input name="confirm_password" type="password" autocomplete="new-password" class="form-input" required minlength="6" maxlength="128" placeholder="再次输入新密码">
-                </label>
-            </div>
-            <div class="flex justify-end">
-                <button type="submit" id="user-password-submit" class="btn admin-btn-secondary px-5 py-2 rounded-lg text-sm inline-flex items-center gap-1.5">
-                    <span class="material-symbols-outlined text-base">password</span>
-                    重置密码
-                </button>
-            </div>
-        </form>`}
+            <h4 class="text-sm font-bold text-slate-800">SSO 身份</h4>
+            <p class="text-xs leading-5 text-slate-500 mt-1">账号创建、身份资料和登录凭据由 sso.ixicai.cn 统一管理。</p>
+        </section>
     </div>
 </div>`;
         document.body.appendChild(overlay);
@@ -4354,12 +4209,7 @@ ${pages.map(p => p === '…'
         const profileForm = overlay.querySelector('#user-profile-form');
         profileForm?.addEventListener('submit', async event => {
             event.preventDefault();
-            const payload = {
-                username: String(profileForm.elements.username.value || '').trim(),
-                email: String(profileForm.elements.email.value || '').trim(),
-                phone: String(profileForm.elements.phone.value || '').trim() || null,
-                is_verified: Boolean(profileForm.elements.is_verified.checked),
-            };
+            const payload = {};
             const sensitiveChanges = [];
             if (!isCurrentUser) {
                 payload.role = String(profileForm.elements.role.value || 'user');
@@ -4379,33 +4229,6 @@ ${pages.map(p => p === '…'
                 user = await api('PUT', `/api/admin/users/${userId}`, payload);
                 toast('用户资料已更新');
                 await loadUsers();
-            } catch (err) {
-                toast(err.message, 'error');
-            } finally {
-                if (submit) submit.disabled = false;
-            }
-        });
-
-        const passwordForm = overlay.querySelector('#user-password-form');
-        passwordForm?.addEventListener('submit', async event => {
-            event.preventDefault();
-            const newPassword = String(passwordForm.elements.new_password.value || '');
-            const confirmation = String(passwordForm.elements.confirm_password.value || '');
-            if (newPassword.length < 6) {
-                toast('新密码至少需要 6 位', 'error');
-                return;
-            }
-            if (newPassword !== confirmation) {
-                toast('两次输入的新密码不一致', 'error');
-                return;
-            }
-
-            const submit = overlay.querySelector('#user-password-submit');
-            if (submit) submit.disabled = true;
-            try {
-                await api('PUT', `/api/admin/users/${userId}/password`, { password: newPassword });
-                passwordForm.reset();
-                toast('用户密码已重置');
             } catch (err) {
                 toast(err.message, 'error');
             } finally {
@@ -4529,8 +4352,6 @@ ${pages.map(p => p === '…'
         // 筛选控件
         const searchInput = document.querySelector('input[type="text"]');
         const [roleSelect, statusSelect] = document.querySelectorAll('select.form-input');
-        document.getElementById('users-invite-button')?.addEventListener('click', openUserInviteModal);
-
         if (roleSelect) {
             roleSelect.innerHTML = `
 <option value="">全部角色</option>

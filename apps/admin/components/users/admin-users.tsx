@@ -5,12 +5,9 @@ import {useLocale, useTranslations} from 'next-intl';
 
 import type {AdminUserQuota, AdminUserSummary} from '@georank/api-sdk';
 import {
-  createAdminUser,
-  deleteAdminUser,
   getAdminDashboard,
   getAdminUserQuota,
   listAdminUsers,
-  resetAdminUserPassword,
   toggleAdminUserActive,
   updateAdminUser,
   updateAdminUserQuota
@@ -34,22 +31,6 @@ type UserDraft = {
   role: string;
   is_active: boolean;
   is_verified: boolean;
-};
-
-type UserCreateDraft = {
-  username: string;
-  email: string;
-  phone: string;
-  role: string;
-  password: string;
-};
-
-const emptyCreateDraft: UserCreateDraft = {
-  username: '',
-  email: '',
-  phone: '',
-  role: 'user',
-  password: ''
 };
 
 function formatDateTime(value?: string | null, locale = 'zh-CN') {
@@ -94,8 +75,6 @@ export function AdminUsers({token}: AdminUsersProps) {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [detail, setDetail] = useState<AdminUserSummary | null>(null);
   const [editDraft, setEditDraft] = useState<UserDraft | null>(null);
-  const [createDraft, setCreateDraft] = useState<UserCreateDraft>(emptyCreateDraft);
-  const [passwordDraft, setPasswordDraft] = useState('');
   const [quota, setQuota] = useState<AdminUserQuota | null>(null);
   const [quotaDraft, setQuotaDraft] = useState({
     grantedTokens: 10000,
@@ -103,7 +82,6 @@ export function AdminUsers({token}: AdminUsersProps) {
     frozen: false,
     reason: ''
   });
-  const [showCreate, setShowCreate] = useState(false);
   const [stats, setStats] = useState({
     total: 0,
     active: 0,
@@ -170,7 +148,7 @@ export function AdminUsers({token}: AdminUsersProps) {
   }, [token, page, query, role, statusFilter, t, reloadKey]);
 
   useEffect(() => {
-    if (!selectedUserId || showCreate) {
+    if (!selectedUserId) {
       setQuota(null);
       return;
     }
@@ -192,7 +170,7 @@ export function AdminUsers({token}: AdminUsersProps) {
     return () => {
       active = false;
     };
-  }, [token, selectedUserId, showCreate, t]);
+  }, [token, selectedUserId, t]);
 
   const topStats = useMemo(() => {
     return [
@@ -207,8 +185,6 @@ export function AdminUsers({token}: AdminUsersProps) {
     setSelectedUserId(user?.id || '');
     setDetail(user);
     setEditDraft(user ? userToDraft(user) : null);
-    setPasswordDraft('');
-    setShowCreate(false);
   }
   async function refreshUsers(nextUserId?: string) {
     const [usersResult, dashboardResult] = await Promise.allSettled([
@@ -244,35 +220,12 @@ export function AdminUsers({token}: AdminUsersProps) {
     if (usersResult.status === 'rejected') throw usersResult.reason;
   }
 
-  async function handleCreateUser(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    try {
-      const created = await createAdminUser(token, {
-        username: createDraft.username.trim(),
-        email: createDraft.email.trim(),
-        phone: createDraft.phone.trim() || null,
-        role: createDraft.role,
-        password: createDraft.password
-      });
-      setActionMessage(t('createdMessage'));
-      setCreateDraft(emptyCreateDraft);
-      setShowCreate(false);
-      await refreshUsers(created.id);
-    } catch (actionError: unknown) {
-      setActionMessage(actionError instanceof Error ? actionError.message : t('createFailed'));
-    }
-  }
-
   async function handleProfileSave() {
     if (!detail || !editDraft) return;
     try {
       const updated = await updateAdminUser(token, detail.id, {
-        username: editDraft.username.trim(),
-        email: editDraft.email.trim(),
-        phone: editDraft.phone.trim() || null,
         role: editDraft.role,
-        is_active: editDraft.is_active,
-        is_verified: editDraft.is_verified
+        is_active: editDraft.is_active
       });
       setActionMessage(t('profileSaved'));
       setDetail(updated);
@@ -291,21 +244,6 @@ export function AdminUsers({token}: AdminUsersProps) {
       await refreshUsers(detail.id);
     } catch (actionError: unknown) {
       setActionMessage(actionError instanceof Error ? actionError.message : t('statusFailed'));
-    }
-  }
-
-  async function handlePasswordReset() {
-    if (!detail) return;
-    if (passwordDraft.length < 6) {
-      setActionMessage(t('passwordTooShort'));
-      return;
-    }
-    try {
-      await resetAdminUserPassword(token, detail.id, {password: passwordDraft});
-      setActionMessage(t('passwordResetMessage'));
-      setPasswordDraft('');
-    } catch (actionError: unknown) {
-      setActionMessage(actionError instanceof Error ? actionError.message : t('passwordResetFailed'));
     }
   }
 
@@ -332,18 +270,6 @@ export function AdminUsers({token}: AdminUsersProps) {
       setActionMessage(t('quotaSaved'));
     } catch (quotaError: unknown) {
       setActionMessage(quotaError instanceof Error ? quotaError.message : t('quotaSaveFailed'));
-    }
-  }
-
-  async function handleDeleteUser() {
-    if (!detail) return;
-    if (!window.confirm(t('deleteConfirm', {username: detail.username}))) return;
-    try {
-      await deleteAdminUser(token, detail.id);
-      setActionMessage(t('deleteMessage'));
-      await refreshUsers('');
-    } catch (actionError: unknown) {
-      setActionMessage(actionError instanceof Error ? actionError.message : t('deleteFailed'));
     }
   }
 
@@ -387,18 +313,7 @@ export function AdminUsers({token}: AdminUsersProps) {
               <p className="admin-panel__eyebrow">Directory</p>
               <h2>{t('directoryTitle')}</h2>
             </div>
-            <button
-              className="admin-button admin-button--primary admin-button--small"
-              type="button"
-              onClick={() => {
-                setShowCreate(true);
-                setSelectedUserId('');
-                setDetail(null);
-                setEditDraft(null);
-              }}
-            >
-              {t('createUser')}
-            </button>
+            <span className="admin-pill admin-pill--success">SSO</span>
           </div>
 
           <div className="admin-toolbar">
@@ -500,93 +415,7 @@ export function AdminUsers({token}: AdminUsersProps) {
         </article>
 
         <article className="admin-panel">
-          {showCreate ? (
-            <form className="admin-stack" onSubmit={handleCreateUser}>
-              <div className="admin-panel__header">
-                <div>
-                  <p className="admin-panel__eyebrow">Create</p>
-                  <h2>{t('createTitle')}</h2>
-                </div>
-              </div>
-
-              <div className="admin-form-grid admin-form-grid--two">
-                <label className="admin-field">
-                  <span>{t('username')}</span>
-                  <input
-                    className="admin-input"
-                    maxLength={100}
-                    minLength={2}
-                    required
-                    value={createDraft.username}
-                    onChange={(event) =>
-                      setCreateDraft((current) => ({...current, username: event.target.value}))
-                    }
-                  />
-                </label>
-                <label className="admin-field">
-                  <span>{t('email')}</span>
-                  <input
-                    className="admin-input"
-                    maxLength={200}
-                    required
-                    type="email"
-                    value={createDraft.email}
-                    onChange={(event) =>
-                      setCreateDraft((current) => ({...current, email: event.target.value}))
-                    }
-                  />
-                </label>
-                <label className="admin-field">
-                  <span>{t('phone')}</span>
-                  <input
-                    className="admin-input"
-                    inputMode="numeric"
-                    maxLength={30}
-                    type="tel"
-                    value={createDraft.phone}
-                    onChange={(event) =>
-                      setCreateDraft((current) => ({...current, phone: event.target.value}))
-                    }
-                  />
-                </label>
-                <label className="admin-field">
-                  <span>{t('password')}</span>
-                  <input
-                    className="admin-input"
-                    maxLength={128}
-                    minLength={6}
-                    required
-                    type="password"
-                    value={createDraft.password}
-                    onChange={(event) =>
-                      setCreateDraft((current) => ({...current, password: event.target.value}))
-                    }
-                  />
-                </label>
-                <label className="admin-field">
-                  <span>{t('roleChange')}</span>
-                  <select
-                    className="admin-select"
-                    value={createDraft.role}
-                    onChange={(event) => setCreateDraft((current) => ({...current, role: event.target.value}))}
-                  >
-                    <option value="admin">{t('adminRole')}</option>
-                    <option value="enterprise">{t('enterpriseRole')}</option>
-                    <option value="user">{t('userRole')}</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="admin-detail-list__actions">
-                <button className="admin-button admin-button--ghost admin-button--small" type="button" onClick={() => setShowCreate(false)}>
-                  {actions('cancel')}
-                </button>
-                <button className="admin-button admin-button--primary admin-button--small" type="submit">
-                  {t('createSubmit')}
-                </button>
-              </div>
-            </form>
-          ) : detail && editDraft ? (
+          {detail && editDraft ? (
             <div className="admin-stack">
               <div className="admin-panel__header">
                 <div>
@@ -665,8 +494,8 @@ export function AdminUsers({token}: AdminUsersProps) {
                     className="admin-input"
                     maxLength={100}
                     minLength={2}
+                    readOnly
                     value={editDraft.username}
-                    onChange={(event) => setEditDraft((current) => current && {...current, username: event.target.value})}
                   />
                 </label>
                 <label className="admin-field">
@@ -674,9 +503,9 @@ export function AdminUsers({token}: AdminUsersProps) {
                   <input
                     className="admin-input"
                     maxLength={200}
+                    readOnly
                     type="email"
                     value={editDraft.email}
-                    onChange={(event) => setEditDraft((current) => current && {...current, email: event.target.value})}
                   />
                 </label>
                 <label className="admin-field">
@@ -685,9 +514,9 @@ export function AdminUsers({token}: AdminUsersProps) {
                     className="admin-input"
                     inputMode="numeric"
                     maxLength={30}
+                    readOnly
                     type="tel"
                     value={editDraft.phone}
-                    onChange={(event) => setEditDraft((current) => current && {...current, phone: event.target.value})}
                   />
                 </label>
                 <label className="admin-field">
@@ -717,8 +546,8 @@ export function AdminUsers({token}: AdminUsersProps) {
                   <span>{status('verified')}</span>
                   <input
                     checked={editDraft.is_verified}
+                    disabled
                     type="checkbox"
-                    onChange={(event) => setEditDraft((current) => current && {...current, is_verified: event.target.checked})}
                   />
                 </label>
               </div>
@@ -732,34 +561,6 @@ export function AdminUsers({token}: AdminUsersProps) {
                 </button>
               </div>
 
-              <div className="admin-detail-list">
-                <div className="admin-detail-list__item">
-                  <label className="admin-field">
-                    <span>{t('newPassword')}</span>
-                    <input
-                      className="admin-input"
-                      maxLength={128}
-                      minLength={6}
-                      type="password"
-                      value={passwordDraft}
-                      onChange={(event) => setPasswordDraft(event.target.value)}
-                    />
-                  </label>
-                  <div className="admin-detail-list__actions">
-                    <button className="admin-button admin-button--ghost admin-button--small" type="button" onClick={handlePasswordReset}>
-                      {t('resetPassword')}
-                    </button>
-                  </div>
-                </div>
-                <div className="admin-detail-list__item admin-detail-list__item--danger">
-                  <p>{t('dangerZone')}</p>
-                  <div className="admin-detail-list__actions">
-                    <button className="admin-button admin-button--danger admin-button--small" type="button" onClick={handleDeleteUser}>
-                      {t('deleteUser')}
-                    </button>
-                  </div>
-                </div>
-              </div>
             </div>
           ) : (
             <div className="admin-detail-card">{t('selectUser')}</div>

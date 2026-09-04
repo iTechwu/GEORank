@@ -514,14 +514,12 @@ class AIClient:
         3. 构建含检索上下文和频道规则的 Prompt → LLM 生成回答
         4. 返回 (回复文本, 关联公司列表)
         """
-        from app.services.company_retrieval import fallback_company_recommendations
         from app.services.runtime_settings import get_solution_template_config
         from sqlalchemy import select
         from app.models.company import Company, PublishStatus
 
-        # BYOK 请求只能使用用户自己的模型凭据。平台 Embedding 属于平台成本，
-        # 因此 BYOK 路径直接使用数据库中的确定性推荐作为上下文。
         # Knowledge owns embedding/vector/graph retrieval and ACL filtering.
+        # 本地 companies 表不得作为问答知识或推荐回退源。
         search_results = []
 
         # Step 3: 获取公司详情
@@ -543,23 +541,6 @@ class AIClient:
             )
             companies = result.scalars().all()
             for c in companies:
-                context_text += f"\n### {c.name}\n{c.description or c.short_description or ''}\n"
-                recommended_companies.append({
-                    "id": str(c.id),
-                    "name": c.name,
-                    "short_description": c.short_description,
-                    "logo_url": c.logo_url,
-                    "geo_score": c.geo_score,
-                    "category": c.category,
-                })
-        elif db is not None:
-            fallback_companies = await fallback_company_recommendations(
-                db,
-                message,
-                diagnostic_report_id=diagnostic_report_id,
-                limit=5,
-            )
-            for c in fallback_companies:
                 context_text += f"\n### {c.name}\n{c.description or c.short_description or ''}\n"
                 recommended_companies.append({
                     "id": str(c.id),
@@ -611,24 +592,22 @@ class AIClient:
         return reply, recommended_companies
 
     async def _remote_knowledge_context(self, query: str) -> str:
-        """Read canonical knowledge only when the deployment explicitly enables it."""
+        """Read the canonical Knowledge service and fail closed when unavailable."""
         mode = settings.KNOWLEDGE_READ_MODE.strip().lower()
         from app.services.knowledge_client import knowledge_client, KnowledgeClientError
 
-        if mode == "local" or not knowledge_client.configured:
-            return ""
+        if mode != "primary":
+            raise KnowledgeClientError("Knowledge 读取模式必须为 primary")
+        if not knowledge_client.configured:
+            raise KnowledgeClientError("Knowledge canonical service is not configured")
         try:
             result = await knowledge_client.search(query, top_k=5, include_memories=True)
             remote, hit_count = self._format_remote_knowledge_context(result, max_chars=4000)
-            if mode == "shadow":
-                logger.info("knowledge shadow search completed", extra={"hit_count": hit_count})
-                return ""
+            logger.info("knowledge canonical search completed", extra={"hit_count": hit_count})
             return remote
         except (KnowledgeClientError, httpx.HTTPError) as error:
             logger.warning("knowledge remote search failed: %s", error)
-            if mode == "primary":
-                raise
-            return ""
+            raise
 
     @staticmethod
     def _format_remote_knowledge_context(result: dict, *, max_chars: int) -> tuple[str, int]:
@@ -659,20 +638,10 @@ class AIClient:
         provider_override: Any | None = None,
     ) -> AsyncGenerator[dict, None]:
         """RAG 问答流式版本"""
-        from app.services.company_retrieval import fallback_company_recommendations
         from app.services.runtime_settings import get_solution_template_config
 
         search_results = []
         company_ids = list({r["company_id"] for r in search_results if r.get("company_id")})
-
-        if not company_ids and db is not None:
-            fallback_companies = await fallback_company_recommendations(
-                db,
-                message,
-                diagnostic_report_id=diagnostic_report_id,
-                limit=5,
-            )
-            company_ids = [str(company.id) for company in fallback_companies]
 
         remote_context = await self._remote_knowledge_context(message)
 

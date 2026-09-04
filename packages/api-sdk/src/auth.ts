@@ -9,6 +9,11 @@ export type { LoginRequest, RegisterRequest, TokenResponse, UserOut } from './ge
 
 const API_BASE = process.env.API_BASE || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
+export function getSsoLoginUrl(returnTo: string, locale: string): string {
+  const query = new URLSearchParams({return_to: returnTo, locale});
+  return `${API_BASE}/api/auth/sso/start?${query.toString()}`;
+}
+
 export type UserProfileUpdatePayload = {
   email?: string;
   username?: string;

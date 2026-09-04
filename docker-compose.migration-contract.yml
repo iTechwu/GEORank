@@ -32,6 +32,9 @@ services:
       SETTINGS_ENCRYPTION_KEY: test-contract-settings-key-32-characters-minimum
       JWT_SECRET: test-contract-jwt-key-32-characters-minimum
       PUBLIC_BASE_URL: https://contract.georank.test
+      SSO_AUTH_REQUIRED: "true"
+      SSO_CLIENT_SECRET: test-sso-secret
+      SSO_REDIRECT_URI: https://georank.dofe.ai/auth/oidc/callback
       POSTGRES_HOST: ${MIGRATION_CONTRACT_POSTGRES_HOST:-host.docker.internal}
       POSTGRES_PORT: "5432"
       POSTGRES_DB: georank_contract

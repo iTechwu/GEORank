@@ -151,8 +151,9 @@ test('next homepage editor guards unsaved work and shows cloned release size', a
   assert.match(component, /formatBytes\(release\.extracted_size \|\| release\.compressed_size\)/);
 });
 
-test('static user directory exposes profile editing and direct admin password reset', async () => {
+test('static user directory keeps SSO identity read-only and exposes only local authorization controls', async () => {
   const javascript = await readFile(adminJsPath, 'utf8');
+  const usersHtml = await readFile(path.join(adminHtmlDir, 'users.html'), 'utf8');
   const editorStart = javascript.indexOf('async function openUserEditModal(userId)');
   const editorEnd = javascript.indexOf('async function loadUsers()', editorStart);
 
@@ -165,14 +166,14 @@ test('static user directory exposes profile editing and direct admin password re
   assert.match(editor, /name="username"/);
   assert.match(editor, /name="email"/);
   assert.match(editor, /name="phone"/);
+  assert.match(editor, /name="username"[^>]*readonly/);
+  assert.match(editor, /name="email"[^>]*readonly/);
+  assert.match(editor, /name="phone"[^>]*readonly/);
   assert.match(editor, /api\('PUT', `\/api\/admin\/users\/\$\{userId\}`, payload\)/);
-  assert.match(editor, /name="new_password"/);
-  assert.match(editor, /name="confirm_password"/);
-  assert.match(
-    editor,
-    /api\('PUT', `\/api\/admin\/users\/\$\{userId\}\/password`, \{ password: newPassword \}\)/
-  );
-  assert.doesNotMatch(editor, /current_password|原密码/);
+  assert.doesNotMatch(editor, /new_password|confirm_password|\/password/);
+  assert.doesNotMatch(javascript, /openUserInviteModal|users-invite-button/);
+  assert.doesNotMatch(usersHtml, /users-invite-button|邀请用户/);
+  assert.match(usersHtml, /SSO 用户目录/);
 });
 
 test('homepage file pickers use the admin button visual language', async () => {

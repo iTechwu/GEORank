@@ -16,6 +16,15 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production"
     SETTINGS_ENCRYPTION_KEY: str = ""
     PUBLIC_BASE_URL: str = "http://localhost:3009"
+    # 生产身份唯一来源。开启后 API Bearer 必须由 SSO userinfo 校验。
+    SSO_AUTH_REQUIRED: bool = False
+    SSO_ISSUER: str = "https://sso.ixicai.cn/api"
+    SSO_CLIENT_ID: str = "georank-dofe-ai"
+    SSO_CLIENT_SECRET: str = ""
+    SSO_REDIRECT_URI: str = "http://localhost:8000/api/auth/sso/callback"
+    SSO_USERINFO_URL: str = "https://sso.ixicai.cn/api/oauth/userinfo"
+    SSO_TIMEOUT_SECONDS: float = 5.0
+    SSO_STATE_TTL_SECONDS: int = 600
     TRUSTED_HOSTS: List[str] = [
         "localhost",
         "127.0.0.1",
@@ -157,6 +166,18 @@ class Settings(BaseSettings):
             or self.SETTINGS_ENCRYPTION_KEY in {self.SECRET_KEY, self.JWT_SECRET}
         ):
             problems.append("SETTINGS_ENCRYPTION_KEY 必须使用至少 32 字符的独立随机值")
+        if not self.SSO_AUTH_REQUIRED:
+            problems.append("SSO_AUTH_REQUIRED 必须开启，GEORank 用户源只能使用 sso.ixicai.cn")
+        if self.SSO_ISSUER.rstrip("/") != "https://sso.ixicai.cn/api":
+            problems.append("SSO_ISSUER 必须固定为 https://sso.ixicai.cn/api")
+        if self.SSO_CLIENT_ID != "georank-dofe-ai":
+            problems.append("SSO_CLIENT_ID 必须使用 georank-dofe-ai")
+        if not self.SSO_CLIENT_SECRET:
+            problems.append("SSO_CLIENT_SECRET 必须配置")
+        if self.SSO_REDIRECT_URI != "https://georank.dofe.ai/auth/oidc/callback":
+            problems.append("SSO_REDIRECT_URI 必须使用 GEORank 生产回调地址")
+        if self.SSO_USERINFO_URL != "https://sso.ixicai.cn/api/oauth/userinfo":
+            problems.append("SSO_USERINFO_URL 必须指向 sso.ixicai.cn userinfo")
 
         public_origin = urlparse(self.PUBLIC_BASE_URL)
         if public_origin.scheme != "https" or not public_origin.hostname:

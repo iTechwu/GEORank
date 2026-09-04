@@ -4,42 +4,23 @@ import {useEffect, useState} from 'react';
 import {useTranslations} from 'next-intl';
 
 import {
-  changePassword,
   clearByokConfig,
   DEFAULT_BYOK_CONFIG,
   getMyUsage,
   isValidByokBaseUrl,
   readByokConfig,
   saveByokConfig,
-  updateCurrentUser,
   type ByokConfig,
   type UserOut,
   type UserUsageSummary
 } from '@georank/api-sdk';
-import {clearSession, maskPhone, updateStoredUser} from '@georank/auth';
+import {clearSession, maskPhone} from '@georank/auth';
 import {localizeHref} from '@georank/i18n/routing';
 
 import {SessionGuard} from '../auth/session-guard';
 
 type AccountSettingsProps = {
   locale: string;
-};
-
-type ProfileFormState = {
-  username: string;
-  email: string;
-};
-
-type PasswordFormState = {
-  currentPassword: string;
-  newPassword: string;
-  confirmPassword: string;
-};
-
-const emptyPasswordState: PasswordFormState = {
-  currentPassword: '',
-  newPassword: '',
-  confirmPassword: ''
 };
 
 function maskApiKey(value: string) {
@@ -87,22 +68,12 @@ function AccountSettingsForm({
   initialUser: UserOut;
 }) {
   const t = useTranslations('web.profile');
-  const [user, setUser] = useState(initialUser);
-  const [profile, setProfile] = useState<ProfileFormState>({
-    username: initialUser.username || '',
-    email: initialUser.email || ''
-  });
-  const [passwords, setPasswords] = useState<PasswordFormState>(emptyPasswordState);
+  const [user] = useState(initialUser);
   const [apiKey, setApiKey] = useState<ByokConfig>(DEFAULT_BYOK_CONFIG);
   const [usage, setUsage] = useState<UserUsageSummary | null>(null);
   const [usageFailed, setUsageFailed] = useState(false);
-  const [profileMessage, setProfileMessage] = useState('');
-  const [profileError, setProfileError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
   const [apiMessage, setApiMessage] = useState('');
   const [apiError, setApiError] = useState('');
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -146,67 +117,6 @@ function AccountSettingsForm({
       cancelled = true;
     };
   }, [token]);
-
-  async function handleProfileSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!profile.username.trim()) {
-      setProfileError(t('usernameRequired'));
-      setProfileMessage('');
-      return;
-    }
-    if (!profile.email.trim()) {
-      setProfileError(t('emailRequired'));
-      setProfileMessage('');
-      return;
-    }
-
-    setSavingProfile(true);
-    setProfileError('');
-    setProfileMessage('');
-    try {
-      const nextUser = await updateCurrentUser(token, {
-        username: profile.username.trim(),
-        email: profile.email.trim()
-      });
-      updateStoredUser(nextUser);
-      setUser(nextUser);
-      setProfile({username: nextUser.username || '', email: nextUser.email || ''});
-      setProfileMessage(t('profileSaved'));
-    } catch (error) {
-      setProfileError(error instanceof Error ? error.message : t('profileFailed'));
-    } finally {
-      setSavingProfile(false);
-    }
-  }
-
-  async function handlePasswordSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (passwords.newPassword.length < 6) {
-      setPasswordError(t('passwordTooShort'));
-      return;
-    }
-    if (passwords.newPassword !== passwords.confirmPassword) {
-      setPasswordError(t('passwordMismatch'));
-      return;
-    }
-
-    setSavingPassword(true);
-    setPasswordError('');
-    try {
-      await changePassword(token, {
-        currentPassword: passwords.currentPassword,
-        newPassword: passwords.newPassword
-      });
-      clearSession();
-      window.location.href = `${localizeHref(locale, '/login')}?return=${encodeURIComponent(
-        localizeHref(locale, '/profile')
-      )}`;
-    } catch (error) {
-      setPasswordError(error instanceof Error ? error.message : t('passwordFailed'));
-    } finally {
-      setSavingPassword(false);
-    }
-  }
 
   function handleApiSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -334,32 +244,17 @@ function AccountSettingsForm({
           <div><p className="page-eyebrow">{t('securityEyebrow')}</p><h2>{t('accountSecurity')}</h2></div>
         </header>
 
-        <details className="profile-setting-disclosure">
-          <summary><span><strong>{t('accountTitle')}</strong><small>{user.username} · {user.email}</small></span><span>{t('edit')} ›</span></summary>
-          <form className="profile-inline-form" onSubmit={handleProfileSubmit}>
+        <div className="profile-setting-disclosure">
+          <div className="profile-inline-form">
+            <strong>{t('ssoManagedTitle')}</strong>
+            <p className="profile-api-note">{t('ssoManagedCopy')}</p>
             <div className="profile-form-grid">
-              <label className="profile-field"><span>{t('username')}</span><input className="tool-input" maxLength={100} minLength={2} required value={profile.username} onChange={(event) => setProfile((current) => ({...current, username: event.target.value}))} /></label>
-              <label className="profile-field"><span>{t('email')}</span><input className="tool-input" maxLength={200} required type="email" value={profile.email} onChange={(event) => setProfile((current) => ({...current, email: event.target.value}))} /></label>
-              <label className="profile-field"><span>{t('phone')}</span><input className="tool-input" readOnly value={user.phone || ''} /></label>
+              <span className="profile-field"><span>{t('username')}</span><strong>{user.username || '-'}</strong></span>
+              <span className="profile-field"><span>{t('email')}</span><strong>{user.email || '-'}</strong></span>
+              <span className="profile-field"><span>{t('phone')}</span><strong>{user.phone || '-'}</strong></span>
             </div>
-            {profileError ? <p className="tool-error profile-form-feedback">{profileError}</p> : null}
-            {profileMessage ? <p className="profile-message profile-form-feedback">{profileMessage}</p> : null}
-            <div className="profile-actions"><button className="tool-button tool-button--primary" disabled={savingProfile} type="submit">{savingProfile ? t('saving') : t('saveProfile')}</button></div>
-          </form>
-        </details>
-
-        <details className="profile-setting-disclosure">
-          <summary><span><strong>{t('passwordTitle')}</strong><small>{t('passwordSummary')}</small></span><span>{t('change')} ›</span></summary>
-          <form className="profile-inline-form" onSubmit={handlePasswordSubmit}>
-            <div className="profile-form-grid">
-              <label className="profile-field"><span>{t('currentPassword')}</span><input autoComplete="current-password" className="tool-input" maxLength={128} minLength={6} required type="password" value={passwords.currentPassword} onChange={(event) => setPasswords((current) => ({...current, currentPassword: event.target.value}))} /></label>
-              <label className="profile-field"><span>{t('newPassword')}</span><input autoComplete="new-password" className="tool-input" maxLength={128} minLength={6} required type="password" value={passwords.newPassword} onChange={(event) => setPasswords((current) => ({...current, newPassword: event.target.value}))} /></label>
-              <label className="profile-field"><span>{t('confirmPassword')}</span><input autoComplete="new-password" className="tool-input" maxLength={128} minLength={6} required type="password" value={passwords.confirmPassword} onChange={(event) => setPasswords((current) => ({...current, confirmPassword: event.target.value}))} /></label>
-            </div>
-            {passwordError ? <p className="tool-error profile-form-feedback">{passwordError}</p> : null}
-            <div className="profile-actions"><button className="tool-button tool-button--primary" disabled={savingPassword} type="submit">{savingPassword ? t('saving') : t('savePassword')}</button></div>
-          </form>
-        </details>
+          </div>
+        </div>
 
         <button className="profile-logout-button" type="button" onClick={clearSessionAndRedirect(locale)}>{t('logout')}</button>
       </section>

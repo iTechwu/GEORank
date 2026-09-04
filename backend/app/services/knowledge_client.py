@@ -33,7 +33,6 @@ class KnowledgeClient:
             and settings.KNOWLEDGE_SSO_ISSUER.strip()
             and settings.KNOWLEDGE_SSO_CLIENT_ID.strip()
             and settings.KNOWLEDGE_SSO_CLIENT_SECRET.strip()
-            and settings.knowledge_space_ids
         )
 
     @staticmethod
@@ -95,10 +94,13 @@ class KnowledgeClient:
             raise KnowledgeClientError("knowledge API URL is not allow-listed")
         payload = {
             "query": query.strip(),
-            "spaceIds": settings.knowledge_space_ids,
             "topK": max(1, min(50, top_k)),
             "includeMemories": include_memories,
         }
+        # Knowledge 根据租户 ACL 解析 canonical role space（tenant.all）；
+        # 客户端不硬编码空间 UUID。仅为兼容显式筛选场景时透传。
+        if settings.knowledge_space_ids:
+            payload["spaceIds"] = settings.knowledge_space_ids
         response = await self._search_request(base_url, payload)
         if response.status_code == 401:
             self._token = None
@@ -114,8 +116,8 @@ class KnowledgeClient:
 
     @property
     def infrastructure_space_id(self) -> str:
-        if not self.configured:
-            raise KnowledgeClientError("knowledge client is not configured")
+        if not self.configured or not settings.knowledge_space_ids:
+            raise KnowledgeClientError("knowledge infrastructure space is not configured")
         return settings.knowledge_space_ids[0]
 
     def put_object(self, key: str, data: bytes, content_type: str) -> dict:

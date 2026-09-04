@@ -112,20 +112,16 @@
         const accountValue = $('[data-profile-account-value]');
         const userName = $('[data-profile-user-name]');
         const status = $('[data-profile-account-status]');
-        const summary = $('[data-profile-account-summary]');
-        const accountForm = $('[data-profile-account-form]');
+        const ssoUsername = $('[data-profile-sso-username]');
+        const ssoEmail = $('[data-profile-sso-email]');
+        const ssoPhone = $('[data-profile-sso-phone]');
 
         if (userName) userName.textContent = user.username || t('profile.signedInUser', '已登录用户');
         if (accountValue) accountValue.textContent = Auth.maskPhone(user.phone || user.username || '');
         if (status) status.textContent = t('profile.active', '启用中');
-        if (summary) summary.textContent = [user.username, user.email].filter(Boolean).join(' · ') || t('profile.profileSummary', '用户名、邮箱');
-        if (accountForm) {
-            accountForm.elements.username.value = user.username || '';
-            accountForm.elements.email.value = user.email || '';
-            accountForm.elements.phone.value = user.phone || '';
-        }
-        setBusy('[data-profile-account-submit]', false, t('profile.saveProfile', '保存资料'));
-        setBusy('[data-profile-password-submit]', false, t('profile.passwordSubmit', '保存新密码'));
+        if (ssoUsername) ssoUsername.textContent = user.username || '-';
+        if (ssoEmail) ssoEmail.textContent = user.email || '-';
+        if (ssoPhone) ssoPhone.textContent = user.phone || '-';
         renderApiKeyForm();
     }
 
@@ -215,72 +211,6 @@
         $('[data-profile-logout]')?.addEventListener('click', () => {
             window.GEOrank?.Auth?.clearSession?.();
             window.location.href = loginPath();
-        });
-
-        $('[data-profile-account-form]')?.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const Auth = window.GEOrank?.Auth;
-            const form = event.currentTarget;
-            const username = form.elements.username?.value.trim() || '';
-            const email = form.elements.email?.value.trim() || '';
-            if (!username) {
-                showMessage('[data-profile-account-message]', t('profile.usernameRequired', '请输入用户名'), 'error');
-                return;
-            }
-            if (!email) {
-                showMessage('[data-profile-account-message]', t('profile.emailRequired', '请输入邮箱'), 'error');
-                return;
-            }
-
-            setBusy('[data-profile-account-submit]', true, t('profile.saveProfile', '保存资料'));
-            try {
-                const user = await Auth.request('/api/auth/me', {
-                    method: 'PUT',
-                    body: JSON.stringify({username, email}),
-                });
-                persistUser(user);
-                showMessage('[data-profile-account-message]', t('profile.profileSaved', '账号资料已更新'), 'success');
-                renderProfile();
-            } catch (error) {
-                showMessage('[data-profile-account-message]', error.message || t('profile.profileFailed', '账号资料更新失败'), 'error');
-            } finally {
-                setBusy('[data-profile-account-submit]', false, t('profile.saveProfile', '保存资料'));
-            }
-        });
-
-        $('[data-profile-password-form]')?.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const Auth = window.GEOrank?.Auth;
-            const form = event.currentTarget;
-            const currentPassword = form.elements.currentPassword?.value || '';
-            const newPassword = form.elements.newPassword?.value || '';
-            const confirmPassword = form.elements.confirmPassword?.value || '';
-
-            if (newPassword.length < 6) {
-                showMessage('[data-profile-password-message]', t('profile.passwordTooShort', '新密码至少 6 位'), 'error');
-                return;
-            }
-            if (newPassword !== confirmPassword) {
-                showMessage('[data-profile-password-message]', t('profile.passwordMismatch', '两次输入的新密码不一致'), 'error');
-                return;
-            }
-
-            setBusy('[data-profile-password-submit]', true, t('profile.passwordSubmit', '保存新密码'));
-            try {
-                await Auth.request('/api/auth/password', {
-                    method: 'PUT',
-                    body: JSON.stringify({
-                        current_password: currentPassword,
-                        new_password: newPassword,
-                    }),
-                });
-                form.reset();
-                Auth.clearSession?.();
-                window.location.href = loginPath();
-            } catch (error) {
-                showMessage('[data-profile-password-message]', error.message || t('profile.passwordFailed', '修改密码失败'), 'error');
-                setBusy('[data-profile-password-submit]', false, t('profile.passwordSubmit', '保存新密码'));
-            }
         });
 
         const apiForm = $('[data-profile-api-form]');

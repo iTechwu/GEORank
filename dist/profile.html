@@ -83,37 +83,17 @@
                     </div>
                 </div>
 
-                <details class="profile-setting-disclosure">
-                    <summary>
-                        <span><strong data-i18n="profile.profileTitle">个人资料</strong><small data-profile-account-summary data-i18n="profile.profileSummary">用户名、邮箱</small></span>
-                        <span class="profile-setting-disclosure__action"><span data-i18n="profile.edit">编辑</span> <span aria-hidden="true">›</span></span>
-                    </summary>
-                    <form class="profile-inline-form" data-profile-account-form>
+                <div class="profile-setting-disclosure">
+                    <div class="profile-inline-form">
+                        <strong data-i18n="profile.ssoManagedTitle">统一身份认证账号</strong>
+                        <p class="profile-api-note" data-i18n="profile.ssoManagedCopy">账号资料和登录凭据由 sso.ixicai.cn 统一管理，GEORank 仅保留授权投影。</p>
                         <div class="profile-form-grid">
-                            <label><span data-i18n="profile.username">用户名</span><input name="username" minlength="2" maxlength="100" required></label>
-                            <label><span data-i18n="profile.email">邮箱</span><input name="email" type="email" maxlength="200" required></label>
-                            <label><span data-i18n="profile.phone">手机号</span><input name="phone" type="tel" readonly aria-readonly="true"></label>
+                            <span><span data-i18n="profile.username">用户名</span><strong data-profile-sso-username>-</strong></span>
+                            <span><span data-i18n="profile.email">邮箱</span><strong data-profile-sso-email>-</strong></span>
+                            <span><span data-i18n="profile.phone">手机号</span><strong data-profile-sso-phone>-</strong></span>
                         </div>
-                        <p class="profile-form-message hidden" data-profile-account-message></p>
-                        <div class="profile-actions"><button type="submit" class="profile-button profile-button--primary" data-profile-account-submit data-i18n="profile.saveProfile">保存资料</button></div>
-                    </form>
-                </details>
-
-                <details class="profile-setting-disclosure">
-                    <summary>
-                        <span><strong data-i18n="profile.passwordTitle">登录密码</strong><small data-i18n="profile.passwordSummary">修改后需要重新登录</small></span>
-                        <span class="profile-setting-disclosure__action"><span data-i18n="profile.change">修改</span> <span aria-hidden="true">›</span></span>
-                    </summary>
-                    <form class="profile-inline-form profile-password-form" data-profile-password-form>
-                        <div class="profile-form-grid">
-                            <label><span data-i18n="profile.currentPassword">当前密码</span><input name="currentPassword" type="password" autocomplete="current-password" minlength="6" maxlength="128" required data-i18n-placeholder="profile.currentPasswordPlaceholder" placeholder="请输入当前密码"></label>
-                            <label><span data-i18n="profile.newPassword">新密码</span><input name="newPassword" type="password" autocomplete="new-password" minlength="6" maxlength="128" required data-i18n-placeholder="profile.newPasswordPlaceholder" placeholder="至少 6 位"></label>
-                            <label><span data-i18n="profile.confirmPassword">确认新密码</span><input name="confirmPassword" type="password" autocomplete="new-password" minlength="6" maxlength="128" required data-i18n-placeholder="profile.confirmPasswordPlaceholder" placeholder="再次输入新密码"></label>
-                        </div>
-                        <p class="profile-form-message hidden" data-profile-password-message></p>
-                        <div class="profile-actions"><button type="submit" class="profile-button profile-button--primary" data-profile-password-submit data-i18n="profile.passwordSubmit">保存新密码</button></div>
-                    </form>
-                </details>
+                    </div>
+                </div>
 
                 <button type="button" class="profile-logout" data-profile-logout data-i18n="profile.logout">退出登录</button>
             </div>

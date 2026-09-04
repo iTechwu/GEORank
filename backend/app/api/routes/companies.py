@@ -572,8 +572,7 @@ async def get_similar_companies(
     top_k: int = 3,
 ):
     """
-    相似公司推荐 — 先尝试 Qdrant 向量检索，
-    向量库为空时降级为同类别随机推荐（保证接口始终有数据）
+    相似公司推荐 — 仅使用 Knowledge 授权结果；无权威结果时返回空列表。
     """
     company = await get_company_by_identifier(db, company_id)
     if not company:

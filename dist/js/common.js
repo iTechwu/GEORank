@@ -375,6 +375,8 @@
                 'auth.invalidPhone': '请输入有效的手机号',
                 'auth.invalidPassword': '密码至少 6 位',
                 'auth.failed': '登录失败，请稍后重试',
+                'auth.ssoCopy': '账户创建与身份验证统一由 ixicai SSO 管理。',
+                'auth.ssoSubmit': '使用 ixicai SSO 继续',
                 'auth.requireReason': '请先登录后继续使用该功能。',
                 'auth.firstVisitReason': '注册或登录后可使用诊断、问答、方案、拓词等功能页面。',
                 'auth.reasonSolutions': '登录后才可提问、保存和继续追问。',
@@ -445,6 +447,8 @@
                 'profile.saveApi': '保存设置',
                 'profile.removeApi': '移除密钥',
                 'profile.accountSecurity': '账户与安全',
+                'profile.ssoManagedTitle': '统一身份认证账号',
+                'profile.ssoManagedCopy': '账号资料和登录凭据由 sso.ixicai.cn 统一管理，GEORank 仅保留授权投影。',
                 'profile.profileTitle': '个人资料',
                 'profile.profileSummary': '用户名、邮箱',
                 'profile.edit': '编辑',
@@ -527,6 +531,8 @@
                 'auth.invalidPhone': 'Enter a valid phone number',
                 'auth.invalidPassword': 'Password must be at least 6 characters',
                 'auth.failed': 'Login failed. Please try again later.',
+                'auth.ssoCopy': 'Account creation and identity verification are managed by ixicai SSO.',
+                'auth.ssoSubmit': 'Continue with ixicai SSO',
                 'auth.requireReason': 'Please log in before using this feature.',
                 'auth.firstVisitReason': 'Register or log in to use diagnostic, Q&A, plan, and keyword tools.',
                 'auth.reasonSolutions': 'Log in to ask questions, save answers, and continue follow-ups.',
@@ -597,6 +603,8 @@
                 'profile.saveApi': 'Save settings',
                 'profile.removeApi': 'Remove key',
                 'profile.accountSecurity': 'Account and security',
+                'profile.ssoManagedTitle': 'Single sign-on account',
+                'profile.ssoManagedCopy': 'Account details and credentials are managed by sso.ixicai.cn. GEORank stores only an authorization projection.',
                 'profile.profileTitle': 'Account profile',
                 'profile.profileSummary': 'Username and email',
                 'profile.edit': 'Edit',
@@ -1562,42 +1570,6 @@ const FOOTER_HTML = `
             return user;
         },
 
-        async login({ phone, password, remember = true }) {
-            const normalizedPhone = this.normalizePhone(phone);
-            const tokenResponse = await this.request('/api/auth/login', {
-                method: 'POST',
-                body: JSON.stringify({
-                    phone: normalizedPhone,
-                    password,
-                    remember_me: remember,
-                }),
-            });
-            const user = await this.request('/api/auth/me', {
-                method: 'GET',
-                headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-            });
-            this.setSession(tokenResponse.access_token, user, remember);
-            return user;
-        },
-
-        async register({ phone, password, remember = true }) {
-            const normalizedPhone = this.normalizePhone(phone);
-            const tokenResponse = await this.request('/api/auth/register', {
-                method: 'POST',
-                body: JSON.stringify({
-                    phone: normalizedPhone,
-                    password,
-                    remember_me: remember,
-                }),
-            });
-            const user = await this.request('/api/auth/me', {
-                method: 'GET',
-                headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
-            });
-            this.setSession(tokenResponse.access_token, user, remember);
-            return user;
-        },
-
         setSession(token, user, remember = true) {
             const previousUser = this.getUser();
             if (previousUser?.id && user?.id && previousUser.id !== user.id) {
@@ -1637,82 +1609,11 @@ const FOOTER_HTML = `
         },
 
         ensureModal() {
-            if (document.getElementById(this.MODAL_ID)) return;
-            const wrapper = document.createElement('div');
-            wrapper.id = this.MODAL_ID;
-            wrapper.className = 'auth-modal hidden';
-            wrapper.innerHTML = `
-                <div class="auth-modal__backdrop" data-auth-close></div>
-                <div class="auth-modal__panel" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
-                    <button type="button" class="auth-modal__close" data-auth-close aria-label="关闭" data-i18n-aria-label="auth.close">
-                        <span class="material-symbols-outlined">close</span>
-                    </button>
-                    <div class="auth-modal__tabs">
-                        <button type="button" class="auth-modal__tab is-active" data-auth-mode="login" data-i18n="auth.login">登录</button>
-                        <button type="button" class="auth-modal__tab" data-auth-mode="register" data-i18n="auth.register">注册</button>
-                    </div>
-                    <p class="auth-modal__reason" data-auth-reason></p>
-                    <form class="auth-form" data-auth-form>
-                        <h2 id="auth-modal-title" class="auth-form__title" data-auth-title data-i18n="auth.loginTitle">手机号登录</h2>
-                        <p class="auth-form__subtitle" data-auth-subtitle data-i18n="auth.defaultSubtitle">输入手机号和密码即可完成登录或注册。</p>
-                        <p class="auth-form__hint" data-i18n="auth.browserHint">当前浏览器仅绑定一个手机号，用于持续保存会话。</p>
-                        <label class="auth-form__label">
-                            <span data-i18n="auth.phone">手机号</span>
-                            <input type="tel" inputmode="numeric" autocomplete="tel" name="phone" placeholder="请输入手机号" data-i18n-placeholder="auth.phonePlaceholder" maxlength="20" required />
-                        </label>
-                        <label class="auth-form__label">
-                            <span data-i18n="auth.password">密码</span>
-                            <input type="password" autocomplete="current-password" name="password" placeholder="请输入密码" data-i18n-placeholder="auth.passwordPlaceholder" minlength="6" maxlength="128" required />
-                        </label>
-                        <label class="auth-form__checkbox">
-                            <input type="checkbox" name="remember" checked />
-                            <span data-i18n="auth.remember">保持登录</span>
-                        </label>
-                        <p class="auth-form__error hidden" data-auth-error></p>
-                        <button type="submit" class="auth-form__submit" data-auth-submit data-i18n="auth.submitLogin">登录</button>
-                        <div class="auth-form__links">
-                            <a href="/login" data-auth-standalone="login" data-i18n="auth.openLoginPage">打开登录页</a>
-                            <a href="/register" data-auth-standalone="register" data-i18n="auth.openRegisterPage">打开注册页</a>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.body.appendChild(wrapper);
-            I18N.apply(wrapper);
-            wrapper.querySelectorAll('[data-auth-close]').forEach((el) => {
-                el.addEventListener('click', () => this.closeModal());
-            });
-            wrapper.querySelectorAll('[data-auth-mode]').forEach((button) => {
-                button.addEventListener('click', () => this.setMode(button.getAttribute('data-auth-mode') || 'login'));
-            });
-            wrapper.querySelector('[data-auth-form]')?.addEventListener('submit', (event) => {
-                event.preventDefault();
-                void this.handleFormSubmit(wrapper.querySelector('[data-auth-form]'));
-            });
+            // Production authentication is delegated to SSO; no local credential form is mounted.
         },
 
         setMode(mode = 'login') {
             this.state.mode = mode === 'register' ? 'register' : 'login';
-            const modal = document.getElementById(this.MODAL_ID);
-            if (!modal) return;
-            modal.querySelectorAll('[data-auth-mode]').forEach((tab) => {
-                tab.classList.toggle('is-active', tab.getAttribute('data-auth-mode') === this.state.mode);
-            });
-            const title = modal.querySelector('.auth-form__title');
-            const subtitle = modal.querySelector('.auth-form__subtitle');
-            const submit = modal.querySelector('.auth-form__submit');
-            if (title) {
-                title.dataset.i18n = this.state.mode === 'login' ? 'auth.loginTitle' : 'auth.registerTitle';
-                title.textContent = I18N.t(title.dataset.i18n);
-            }
-            if (subtitle) {
-                subtitle.dataset.i18n = this.state.mode === 'login' ? 'auth.loginSubtitle' : 'auth.registerSubtitle';
-                subtitle.textContent = I18N.t(subtitle.dataset.i18n);
-            }
-            if (submit) {
-                submit.dataset.i18n = this.state.mode === 'login' ? 'auth.submitLogin' : 'auth.submitRegister';
-                submit.textContent = I18N.t(submit.dataset.i18n);
-            }
         },
 
         showError(message = '', root = null) {
@@ -1737,24 +1638,17 @@ const FOOTER_HTML = `
             }
         },
 
+        ssoLoginUrl(returnTo = window.location.pathname + window.location.search) {
+            const locale = document.documentElement.lang === 'en-US' ? 'en-US' : 'zh-CN';
+            const query = new URLSearchParams({
+                return_to: this.safeReturnTo(returnTo, '/'),
+                locale,
+            });
+            return `${this.apiBase}/api/auth/sso/start?${query.toString()}`;
+        },
+
         openModal(mode = 'login', options = {}) {
-            this.ensureModal();
-            this.setMode(mode);
-            const modal = document.getElementById(this.MODAL_ID);
-            if (!modal) return;
-            const reasonEl = modal.querySelector('[data-auth-reason]');
-            const reason = options.reason || '';
-            reasonEl.textContent = reason;
-            reasonEl.classList.toggle('hidden', !reason);
-            modal.classList.remove('hidden');
-            document.body.classList.add('auth-modal-open');
-            this.showError('');
-            const boundPhone = this.getBoundPhone();
-            const phoneInput = modal.querySelector('input[name="phone"]');
-            if (boundPhone && phoneInput && !phoneInput.value) {
-                phoneInput.value = boundPhone;
-            }
-            phoneInput?.focus();
+            window.location.assign(this.ssoLoginUrl());
         },
 
         closeModal() {
@@ -1766,50 +1660,7 @@ const FOOTER_HTML = `
 
         async handleFormSubmit(form) {
             if (!form) return;
-            const submitBtn = form.querySelector('.auth-form__submit');
-            const phone = form.elements.phone?.value || '';
-            const password = form.elements.password?.value || '';
-            const remember = Boolean(form.elements.remember?.checked);
-            const normalizedPhone = this.normalizePhone(phone);
-            const boundPhone = this.getBoundPhone();
-            if (boundPhone && boundPhone !== normalizedPhone) {
-                this.showError(I18N.t('auth.invalidBoundPhone', { phone: this.maskPhone(boundPhone) }), form);
-                return;
-            }
-            if (!/^1\d{10}$/.test(normalizedPhone)) {
-                this.showError(I18N.t('auth.invalidPhone'), form);
-                return;
-            }
-            if (String(password).length < 6) {
-                this.showError(I18N.t('auth.invalidPassword'), form);
-                return;
-            }
-            const confirmPassword = form.elements.confirmPassword?.value || '';
-            if (this.state.mode === 'register' && password !== confirmPassword) {
-                this.showError(I18N.t('auth.passwordMismatch'), form);
-                return;
-            }
-            submitBtn?.setAttribute('disabled', 'disabled');
-            submitBtn && (submitBtn.textContent = this.state.mode === 'login' ? I18N.t('auth.submittingLogin') : I18N.t('auth.submittingRegister'));
-            try {
-                const user = this.state.mode === 'register'
-                    ? await this.register({ phone: normalizedPhone, password, remember })
-                    : await this.login({ phone: normalizedPhone, password, remember });
-                this.closeModal();
-                const currentPath = Routes.normalizePath(window.location.pathname);
-                if (currentPath === '/login' || currentPath === '/register') {
-                    const params = new URLSearchParams(window.location.search);
-                    const returnTo = this.safeReturnTo(params.get('return'), '/');
-                    window.location.href = returnTo;
-                    return;
-                }
-                this.showToast?.(I18N.t('auth.toastSignedIn', { phone: this.maskPhone(user.phone) }));
-            } catch (error) {
-                this.showError(error.message || I18N.t('auth.failed'), form);
-            } finally {
-                submitBtn?.removeAttribute('disabled');
-                submitBtn && (submitBtn.textContent = this.state.mode === 'login' ? I18N.t('auth.submitLogin') : I18N.t('auth.submitRegister'));
-            }
+            window.location.assign(this.ssoLoginUrl());
         },
 
         requireAuth(options = {}) {
@@ -1944,46 +1795,15 @@ const FOOTER_HTML = `
                     <div class="auth-standalone__card">
                         <p class="auth-standalone__eyebrow">${mode === 'register' ? I18N.t('auth.standaloneRegisterEyebrow') : I18N.t('auth.standaloneLoginEyebrow')}</p>
                         <h1 class="auth-standalone__title">${mode === 'register' ? I18N.t('auth.standaloneRegisterTitle') : I18N.t('auth.standaloneLoginTitle')}</h1>
-                        <p class="auth-standalone__copy">${mode === 'register' ? I18N.t('auth.standaloneRegisterCopy') : I18N.t('auth.standaloneLoginCopy')}</p>
-                        <form class="auth-form auth-form--standalone" data-auth-standalone-form>
-                            <label class="auth-form__label">
-                                <span>${I18N.t('auth.phone')}</span>
-                                <input type="tel" inputmode="numeric" autocomplete="tel" name="phone" placeholder="${I18N.t('auth.phonePlaceholder')}" maxlength="20" required />
-                            </label>
-                            <label class="auth-form__label">
-                                <span>${I18N.t('auth.password')}</span>
-                                <input type="password" autocomplete="${mode === 'register' ? 'new-password' : 'current-password'}" name="password" placeholder="${I18N.t('auth.passwordPlaceholder')}" minlength="6" maxlength="128" required />
-                            </label>
-                            ${mode === 'register' ? `
-                            <label class="auth-form__label">
-                                <span>${I18N.t('auth.confirmPassword')}</span>
-                                <input type="password" autocomplete="new-password" name="confirmPassword" placeholder="${I18N.t('auth.confirmPasswordPlaceholder')}" minlength="6" maxlength="128" required />
-                            </label>` : ''}
-                            <label class="auth-form__checkbox">
-                                <input type="checkbox" name="remember" checked />
-                                <span>${I18N.t('auth.remember')}</span>
-                            </label>
+                        <p class="auth-standalone__copy">${I18N.t('auth.ssoCopy')}</p>
+                        <div class="auth-form auth-form--standalone">
+                            <a class="auth-form__submit" href="${this.ssoLoginUrl(this.safeReturnTo(new URLSearchParams(window.location.search).get('return'), '/profile'))}">${I18N.t('auth.ssoSubmit')}</a>
                             <p class="auth-form__error hidden" data-auth-error></p>
-                            <button type="submit" class="auth-form__submit">${mode === 'register' ? I18N.t('auth.submitRegister') : I18N.t('auth.submitLogin')}</button>
-                            <div class="auth-form__links">
-                                ${mode === 'register'
-                                    ? `<a href="${this.authLinkWithReturn('/login')}">${I18N.t('auth.goLogin')}</a>`
-                                    : `<a href="${this.authLinkWithReturn('/register')}">${I18N.t('auth.goRegister')}</a>`}
-                            </div>
-                        </form>
+                        </div>
                     </div>
                 </div>
             `;
             this.state.mode = mode;
-            const boundPhone = this.getBoundPhone();
-            root.querySelector('[data-auth-standalone-form]')?.addEventListener('submit', (event) => {
-                event.preventDefault();
-                void this.handleFormSubmit(root.querySelector('[data-auth-standalone-form]'));
-            });
-            const phoneInput = root.querySelector('input[name="phone"]');
-            if (boundPhone && phoneInput && !phoneInput.value) {
-                phoneInput.value = boundPhone;
-            }
         },
 
         showToast(message) {

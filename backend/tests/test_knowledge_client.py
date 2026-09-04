@@ -91,6 +91,20 @@ class KnowledgeClientTest(unittest.TestCase):
             with self.assertRaisesRegex(KnowledgeClientError, "not allow-listed"):
                 asyncio.run(client.search("query"))
 
+    def test_search_uses_knowledge_acl_without_space_ids(self) -> None:
+        http = _AsyncClient([
+            self._response({"access_token": "token-1", "expires_in": 300}),
+            self._response({"data": {"list": [], "total": 0}}),
+        ])
+        client = KnowledgeClient()
+
+        with patch("app.services.knowledge_client.httpx.AsyncClient", return_value=http), patch(
+            "app.services.knowledge_client.settings", self._settings(knowledge_space_ids=[])
+        ):
+            asyncio.run(client.search("query"))
+
+        self.assertNotIn("spaceIds", http.post.await_args_list[1].kwargs["json"])
+
     def test_short_token_is_not_cached_past_its_expiry(self) -> None:
         token_response = self._response({"access_token": "short-token", "expires_in": 10})
         http = _AsyncClient([token_response])

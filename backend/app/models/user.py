@@ -23,6 +23,7 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False, index=True)
+    sso_subject: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True, index=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
     phone: Mapped[str | None] = mapped_column(String(30), unique=True, nullable=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(200), nullable=False)
