@@ -38,11 +38,23 @@ class KnowledgeClient:
     @staticmethod
     def _allowlisted(url: str) -> bool:
         parsed = urlparse(url)
-        return parsed.scheme == "https" and parsed.hostname in {
-            "knowledge.dofe.ai",
-            "knowledge.local.dofe.ai",
-            "sso.ixicai.cn",
-        }
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            return False
+        try:
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        except ValueError:
+            return False
+        if parsed.scheme == "https" and port == 443:
+            return parsed.hostname in {
+                "knowledge.dofe.ai",
+                "knowledge.local.dofe.ai",
+                "sso.ixicai.cn",
+            }
+        return (
+            parsed.scheme == "http"
+            and parsed.hostname == "dofe-knowledge-api"
+            and port == 3110
+        )
 
     async def _access_token(self) -> str:
         if self._token and self._expires_at > time.time() + 30:

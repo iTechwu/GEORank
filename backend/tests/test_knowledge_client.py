@@ -91,6 +91,17 @@ class KnowledgeClientTest(unittest.TestCase):
             with self.assertRaisesRegex(KnowledgeClientError, "not allow-listed"):
                 asyncio.run(client.search("query"))
 
+    def test_allows_only_the_exact_ci_internal_knowledge_origin(self) -> None:
+        self.assertTrue(KnowledgeClient._allowlisted("http://dofe-knowledge-api:3110/api"))
+        for url in (
+            "http://dofe-knowledge-api:3111/api",
+            "http://attacker:3110/api",
+            "http://user@dofe-knowledge-api:3110/api",
+            "http://dofe-knowledge-api:3110/api?target=attacker",
+            "http://dofe-knowledge-api:invalid/api",
+        ):
+            self.assertFalse(KnowledgeClient._allowlisted(url), url)
+
     def test_search_uses_knowledge_acl_without_space_ids(self) -> None:
         http = _AsyncClient([
             self._response({"access_token": "token-1", "expires_in": 300}),
