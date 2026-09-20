@@ -79,7 +79,7 @@ class Settings(BaseSettings):
     # knowledge.dofe.ai is the canonical enterprise knowledge/memory/graph API.
     KNOWLEDGE_API_URL: str = ""
     KNOWLEDGE_SSO_ISSUER: str = "https://sso.ixicai.cn/api"
-    KNOWLEDGE_SSO_CLIENT_ID: str = "georank-dofe-ai"
+    KNOWLEDGE_SSO_CLIENT_ID: str = "georank-service-dofe-ai"
     KNOWLEDGE_SSO_CLIENT_SECRET: str = ""
     KNOWLEDGE_SSO_SCOPE: str = "service:access"
     KNOWLEDGE_TENANT_SLUG: str = "yootun"
