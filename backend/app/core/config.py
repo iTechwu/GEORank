@@ -81,7 +81,7 @@ class Settings(BaseSettings):
     KNOWLEDGE_SSO_ISSUER: str = "https://sso.ixicai.cn/api"
     KNOWLEDGE_SSO_CLIENT_ID: str = "georank-service-dofe-ai"
     KNOWLEDGE_SSO_CLIENT_SECRET: str = ""
-    KNOWLEDGE_SSO_SCOPE: str = "service:access"
+    KNOWLEDGE_SSO_SCOPE: str = "knowledge.read knowledge.document.ingest knowledge.memory.write knowledge.session.checkpoint"
     KNOWLEDGE_TENANT_SLUG: str = "yootun"
     KNOWLEDGE_SPACE_IDS: str = ""
     KNOWLEDGE_READ_MODE: str = "primary"
