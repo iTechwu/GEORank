@@ -61,7 +61,7 @@ class McpAuthConfig:
     sso_timeout_seconds: float
     gateway_secret: str = ""
     gateway_only: bool = False
-    models_base_url: str = "https://ixicai.cn/api/v1"
+    models_base_url: str = "https://ai.hozonauto.com/api/v1"
     models_chat_model: str = ""
     models_embedding_model: str = ""
 
